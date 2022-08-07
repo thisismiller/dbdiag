@@ -2,8 +2,6 @@
 
 import argparse
 import sys
-import ply.lex
-import ply.yacc
 import collections
 import bisect
 
@@ -18,65 +16,28 @@ PX_ACTORBAR_SEPARATION = 4
 
 #### Parser
 
-tokens = ( 'COLON', 'TEXT', 'NEWLINE' )
-
-def make_lexer():
-    t_TEXT = r'"[^"]+"|[a-zA-Z0-9_(){}.]+'
-    t_COLON = r':'
-    t_NEWLINE = r'\n+'
-    t_ignore = r' '
-
-    def t_error(t):
-        print("Illegal character '%s'" % t)
-        raise RuntimeError()
-
-    def t_comment(t):
-        r'\#(\\\n|.)*\n'
-        pass
-
-    return ply.lex.lex()
-
 Operation = collections.namedtuple('Operation', ['actor', 'op', 'key'])
 
-def make_parser():
-    def p_operations_first(p):
-        'operations : operation'
-        p[0] = [ p[1] ]
-
-    def p_operations_extend(p):
-        'operations : operations NEWLINE operation'
-        p[0] = p[1]
-        p[0].append(p[3])
-
-    def p_operations_extranewline(p):
-        'operations : operations NEWLINE'
-        p[0] = p[1]
-
-    def p_operation_startend(p):
-        'operation : TEXT COLON TEXT TEXT'
-        p[3] = p[3].strip('"')
-        if p[3] == 'END': p[3] = None
-        p[0] = Operation(p[1], p[3], p[4])
-
-    def p_operation_instant(p):
-        'operation : TEXT COLON TEXT'
-        p[3] = p[3].strip('"')
-        p[0] = Operation(p[1], p[3], None)
-
-    def p_error(p):
-        if p:
-            print("Syntax error at '%s'" % p.value)
-        else:
-            print("Syntax error at EOF")
-        raise RuntimeError()
-
-    return ply.yacc.yacc()
+import re
 
 def parse_operations(text):
-    lexer = make_lexer()
-    parser = make_parser()
-
-    return parser.parse(text, lexer=lexer)
+    operations = []
+    TEXT = r'"[^"]+"|[a-zA-Z0-9_(){}.]+'
+    RGX = f'(?P<actor>{TEXT}) *: *(?P<op>{TEXT}) *(?P<key>{TEXT})?'
+    for line in text.splitlines():
+        line = line.strip('\n')
+        if not line or line.startswith('#'):
+            continue
+        match = re.fullmatch(RGX, line)
+        if not match:
+            print(f'Line `{line}` must be of the form `actor: op key`.')
+            raise RuntimeError('parse failure')
+        opname = match.group('op')
+        opname = opname.strip('"')
+        if opname == 'END':
+            opname = None
+        operations.append(Operation(match.group('actor'), opname, match.group('key')))
+    return operations
 
 #### Data Model
 
