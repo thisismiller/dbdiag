@@ -5,7 +5,9 @@ import sys
 import collections
 import bisect
 
+# OUTER_BUFFER | INNER_BUFFER <text> INNER_INNER_BUFFER <text> INNER_BUFFER |
 INNER_BUFFER = 1
+INNER_INNER_BUFFER = 3
 OUTER_BUFFER = 4
 PX_CHAR_HEIGHT = 15
 PX_SPAN_VERTICAL = 30
@@ -23,7 +25,7 @@ import re
 def parse_operations(text):
     operations = []
     TEXT = r'"[^"]+"|[a-zA-Z0-9_(){}.]+'
-    RGX = f'(?P<actor>{TEXT}) *: *(?P<op>{TEXT}) *(?P<key>{TEXT})?'
+    RGX = f'(?P<actor>{TEXT}) *(:|\.)? *(?P<op>{TEXT}) *(?P<key>{TEXT})?'
     for line in text.splitlines():
         line = line.strip('\n')
         if not line or line.startswith('#'):
@@ -130,7 +132,7 @@ def span_width(span):
     (left, right) = span.text
     chars = len(left or "") + len(right or "")
     both = left and right
-    ret = chars + (4 * INNER_BUFFER if both else 0) + INNER_BUFFER * 2
+    ret = chars + (INNER_INNER_BUFFER if both else 0) + INNER_BUFFER * 2
     return ret
 
 def spans_to_chart(spaninfo):

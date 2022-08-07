@@ -1,0 +1,24 @@
+<svg version="1.1" width="41ch" height="135px" xmlns="http://www.w3.org/2000/svg">
+<text text-anchor="middle" alignment-baseline="middle" font-family="monospace" x="4ch" y="26.0px">A</text>
+<line x1="8.0ch" y1="15px" x2="8.0ch" y2="37px" stroke="black" />
+<text text-anchor="middle" alignment-baseline="middle" font-family="monospace" x="4ch" y="56.0px">B</text>
+<line x1="8.0ch" y1="45px" x2="8.0ch" y2="67px" stroke="black" />
+<text text-anchor="middle" alignment-baseline="middle" font-family="monospace" x="4ch" y="86.0px">C</text>
+<line x1="8.0ch" y1="75px" x2="8.0ch" y2="97px" stroke="black" />
+<line x1="11ch" y1="30px" x2="17ch" y2="30px" stroke="black" />
+<line x1="11ch" y1="22px" x2="11ch" y2="38px" stroke="black" />
+<line x1="17ch" y1="22px" x2="17ch" y2="38px" stroke="black" />
+<text text-anchor="middle" alignment-baseline="baseline" x="14.0ch" y="26px">E(x)</text>
+<line x1="15ch" y1="60px" x2="21ch" y2="60px" stroke="black" />
+<line x1="15ch" y1="52px" x2="15ch" y2="68px" stroke="black" />
+<line x1="21ch" y1="52px" x2="21ch" y2="68px" stroke="black" />
+<text text-anchor="middle" alignment-baseline="baseline" x="18.0ch" y="56px">E(y)</text>
+<line x1="27ch" y1="30px" x2="33ch" y2="30px" stroke="black" />
+<line x1="27ch" y1="22px" x2="27ch" y2="38px" stroke="black" />
+<line x1="33ch" y1="22px" x2="33ch" y2="38px" stroke="black" />
+<text text-anchor="middle" alignment-baseline="baseline" x="30.0ch" y="26px">D(y)</text>
+<line x1="31ch" y1="90px" x2="37ch" y2="90px" stroke="black" />
+<line x1="31ch" y1="82px" x2="31ch" y2="98px" stroke="black" />
+<line x1="37ch" y1="82px" x2="37ch" y2="98px" stroke="black" />
+<text text-anchor="middle" alignment-baseline="baseline" x="34.0ch" y="86px">D(x)</text>
+</svg>
