@@ -24,39 +24,40 @@ To reproduce the four FIFO queue histories from _S1.2 Motivation_:
 <tbody>
 <tr>
   <td>
-<code>
+
+<pre><code>
 A: E(x) a
 B: E(y)
 A: END a
 B: D(x)
 A: D(y)
 A: E(z)
-</code>
+</code></pre>
   </td>
   <td><img src="examples/linearizability_1.2.a.svg" /></td>
 </tr>
   <td>
-<code>
+<pre><code>
 A: E(x)
 B: E(y) a
 A: D(y) a
 B: END a
 A: END a
-</code>
+</code></pre>
   </td>
   <td><img src="examples/linearizability_1.2.b.svg" /></td>
 </tr>
   <td>
-<code>
+<pre><code>
 A: E(x) a
 B: D(x)
 A: END a
-</code>
+</code></pre>
   </td>
   <td><img src="examples/linearizability_1.2.c.svg" /></td>
 </tr>
   <td>
-<code>
+<pre><code>
 A: E(x) a
 B: E(y) a
 A: END a
@@ -65,7 +66,7 @@ A: D(y) a
 C: D(x) a
 A: END a
 C: END a
-</code>
+</code></pre>
   </td>
   <td><img src="examples/linearizability_1.2.d.svg" /></td>
 </tr>
