@@ -130,7 +130,7 @@ def span_width(span):
     (left, right) = span.text
     chars = len(left or "") + len(right or "")
     both = left and right
-    ret = chars + (2 if both else 0) + INNER_BUFFER * 2
+    ret = chars + (4 * INNER_BUFFER if both else 0) + INNER_BUFFER * 2
     return ret
 
 def spans_to_chart(spaninfo):
