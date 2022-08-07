@@ -1,31 +1,56 @@
 #!/usr/bin/env python3
 
 import argparse
-import sys
-import collections
 import bisect
+import collections
+import dataclasses
+import re
+import sys
+from typing import NamedTuple, Optional, TypeAlias
+
+class Point(NamedTuple):
+    x: int
+    y: int = 1  # Set default value
+       
+UnitsCh : TypeAlias = int
+UnitsEm : TypeAlias = int
+UnitsPx : TypeAlias = int
 
 # OUTER_BUFFER | INNER_BUFFER <text> INNER_INNER_BUFFER <text> INNER_BUFFER |
-INNER_BUFFER = 1
-INNER_INNER_BUFFER = 3
-OUTER_BUFFER = 4
-PX_CHAR_HEIGHT = 15
-PX_SPAN_VERTICAL = 30
-PX_LINE_TEXT_SEPARATION = 4
-BARHEIGHT = 8
-CH_ACTOR_SPAN_SEPARATION = 6
-PX_ACTORBAR_SEPARATION = 4
+INNER_BUFFER : UnitsCh = 1
+INNER_INNER_BUFFER : UnitsCh = 3
+OUTER_BUFFER : UnitsCh = 4
+PX_CHAR_HEIGHT : UnitsPx = 15
+PX_SPAN_VERTICAL : UnitsPx = 30
+PX_LINE_TEXT_SEPARATION : UnitsPx = 4
+BARHEIGHT : UnitsPx = 8
+CH_ACTOR_SPAN_SEPARATION : UnitsCh = 6
+PX_ACTORBAR_SEPARATION : UnitsPx = 4
+
+DEBUG = False
 
 #### Parser
 
-Operation = collections.namedtuple('Operation', ['actor', 'op', 'key'])
+class Operation(NamedTuple):
+    actor: str
+    op: str
+    key: Optional[str]
 
-import re
+def parse_operations(text : str) -> list[Operation]:
+    """Parse a text file of operations into list[Operation].
 
-def parse_operations(text):
+    TEXT := "[^"]+"                           # Quoted strings get " stripped
+          | [a-zA-Z0-9_(){}.]+                # Omit " for anything identifier-like
+    COMMENT := #.*                            # '#' is still for comments
+    SEPERATOR := NOTHING | : | .              # a foo, a: foo() or a.foo are all fine
+    OPERATION := TEXT SEPERATOR? TEXT TEXT?   # Becomes: ACTOR seperator OP KEY
+    LINE := NOTHING
+          | COMMENT
+          | OPERATION COMMENT?
+    """
     operations = []
     TEXT = r'"[^"]+"|[a-zA-Z0-9_(){}.]+'
-    RGX = f'(?P<actor>{TEXT}) *(:|\.)? *(?P<op>{TEXT}) *(?P<key>{TEXT})?'
+    RGX = f'(?P<actor>{TEXT}) *(:|\.)? *(?P<op>{TEXT}) *(?P<key>{TEXT})? *(#.*)?'
     for line in text.splitlines():
         line = line.strip('\n')
         if not line or line.startswith('#'):
@@ -34,8 +59,7 @@ def parse_operations(text):
         if not match:
             print(f'Line `{line}` must be of the form `actor: op key`.')
             raise RuntimeError('parse failure')
-        opname = match.group('op')
-        opname = opname.strip('"')
+        opname = match.group('op').strip('"')
         if opname == 'END':
             opname = None
         operations.append(Operation(match.group('actor'), opname, match.group('key')))
@@ -43,27 +67,23 @@ def parse_operations(text):
 
 #### Data Model
 
+@dataclasses.dataclass
 class Span(object):
-    def __init__(self, actor, start, end, height, text):
-        self.actor = actor
-        self.start = start
-        self.end = end
-        self.height = height
-        self.text = text
-        self.x1 = None
-        self.x2 = None
-        self.y = None
-
-    def __repr__(self):
-        return '(%s, %s, %s, %s, %s)' % (repr(self.actor), repr(self.x),
-repr(self.y), repr(self.width), repr(self.text))
+    actor : str
+    start : int
+    end : int
+    height : int
+    text : tuple[Optional[str], Optional[str]]
+    x1 : Optional[UnitsCh] = None
+    x2 : Optional[UnitsCh] = None
+    y : Optional[UnitsPx] = None
 
 class TokenBucket(object):
     def __init__(self):
         self._tokens = []
         self._max_token = -1
 
-    def acquire(self):
+    def acquire(self) -> int:
         if self._tokens:
             token = self._tokens[0]
             self._tokens.pop(0)
@@ -72,22 +92,25 @@ class TokenBucket(object):
             token = self._max_token
         return token
 
-    def release(self, token):
+    def release(self, token : int) -> None:
         bisect.insort(self._tokens, token)
 
-    def max_token(self):
+    def max_token(self) -> int:
         return self._max_token
 
 SpanStart = collections.namedtuple('SpanStart', ['op', 'start', 'height'])
 
-SpanInfo = collections.namedtuple('SpanInfo', ['spans', 'actors', 'depths'])
+class SpanInfo(NamedTuple):
+    spans : list[Span]
+    actors : list[str]
+    depths : dict[str, TokenBucket]
 
-def operations_to_spans(operations):
-    inflight = {}
-    actors_names = []
-    actor_depth = {}
-    spans = []
-    shortspans = 0
+def operations_to_spans(operations : list[Operation]) -> SpanInfo:
+    inflight : dict[str, SpanStart]= {}
+    actors_names : list[str] = []
+    actor_depth : dict[str, TokenBucket] = {}
+    spans : list[Span] = []
+    shortspans : int = 0
 
     for idx, op in enumerate(operations):
         if op.actor not in actors_names:
@@ -115,28 +138,28 @@ def operations_to_spans(operations):
     return SpanInfo(spans, actors_names, actor_depth)
 
 
-Chart = collections.namedtuple('Chart', ['actors', 'spans', 'width',
-'height', 'max_actor_width'])
-class Actor(object):
-    def __init__(self, name, x, y, width, height):
-        self.name = name
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
+class Actor(NamedTuple):
+    name : str
+    x : int
+    y : int
+    width : int
+    height : int
 
-    def __repr__(self):
-        return '(%s, %s, %s, %s, %s)' % (repr(self.name), repr(self.x), repr(self.y), repr(self.width), repr(self.height))
+class Chart(NamedTuple):
+    actors : list[Actor]
+    spans : list[Span]
+    width : UnitsCh
+    height : UnitsPx
+    max_actor_width : UnitsCh
 
-def span_width(span):
+def span_width(span : Span) -> int:
     (left, right) = span.text
     chars = len(left or "") + len(right or "")
     both = left and right
     ret = chars + (INNER_INNER_BUFFER if both else 0) + INNER_BUFFER * 2
     return ret
 
-def spans_to_chart(spaninfo):
-    total_height = sum(v.max_token() for v in spaninfo.depths.values())
+def spans_to_chart(spaninfo : SpanInfo) -> Chart:
     actors = []
 
     max_actor_width = max(len(actor) for actor in spaninfo.actors)
@@ -191,29 +214,33 @@ def spans_to_chart(spaninfo):
 
 #### Renderer
 
-def svg_header(width, height):
+def svg_header(width : UnitsCh, height : UnitsPx) -> str:
     return f'''<svg version="1.1" width="{width}ch" height="{height}px" xmlns="http://www.w3.org/2000/svg">'''
 
-def svg_footer():
+def svg_footer() -> str:
     return '</svg>'
 
-def svg_actor(actor):
+def svg_actor(actor : Actor) -> str:
+    lines = []
     text_y = actor.y + actor.height / 2
-    svgtext = f'<text text-anchor="middle" alignment-baseline="middle" font-family="monospace" x="{actor.x}ch" y="{text_y}px">{actor.name}</text>'
+    lines.append(f'<text text-anchor="middle" alignment-baseline="middle" font-family="monospace" x="{actor.x}ch" y="{text_y}px">{actor.name}</text>')
     line_x = actor.x + actor.width + CH_ACTOR_SPAN_SEPARATION / 2
     top_y = actor.y + PX_ACTORBAR_SEPARATION
     bottom_y = actor.y + actor.height - PX_ACTORBAR_SEPARATION
-    svgline = f'<line x1="{line_x}ch" y1="{top_y}px" x2="{line_x}ch" y2="{bottom_y}px" stroke="black" />'
-    return svgtext + '\n' + svgline
+    lines.append(f'<line x1="{line_x}ch" y1="{top_y}px" x2="{line_x}ch" y2="{bottom_y}px" stroke="black" />')
+    if DEBUG:
+        lines.append(f'<line x1="0%" y1="{top_y}px" x2="100%" y2="{top_y}px" stroke="black" />')
+        lines.append(f'<line x1="0%" y1="{bottom_y}px" x2="100%" y2="{bottom_y}px" stroke="black" />')
+    return '\n'.join(lines)
 
-def svg_span_line(span):
+def svg_span_line(span : Span) -> str:
     return '\n'.join([
         f'<line x1="{span.x1}ch" y1="{span.y}px" x2="{span.x2}ch" y2="{span.y}px" stroke="black" />',
         f'<line x1="{span.x1}ch" y1="{span.y-BARHEIGHT}px" x2="{span.x1}ch" y2="{span.y+BARHEIGHT}px" stroke="black" />',
         f'<line x1="{span.x2}ch" y1="{span.y-BARHEIGHT}px" x2="{span.x2}ch" y2="{span.y+BARHEIGHT}px" stroke="black" />'
     ])
 
-def svg_span_text(span):
+def svg_span_text(span : Span) -> str:
     left_text, right_text = span.text
     y = span.y - PX_LINE_TEXT_SEPARATION
     if left_text and right_text:
@@ -229,10 +256,10 @@ def svg_span_text(span):
     else:
         return ''
 
-def svg_span(span):
+def svg_span(span : Span) -> str:
     return svg_span_line(span) + '\n' + svg_span_text(span)
 
-def chart_to_svg(chart):
+def chart_to_svg(chart : Chart) -> str:
     svg = []
     svg.append(svg_header(chart.width, chart.height))
     for actor in chart.actors:
@@ -254,16 +281,20 @@ def parse_args(argv):
 def main(argv):
     args = parse_args(argv)
 
+    if args.debug:
+        global DEBUG
+        DEBUG = True
+
     with open(args.file) as f:
         operations = parse_operations(f.read())
 
-    if args.debug: print(operations)
+    if DEBUG: print(operations)
     spans = operations_to_spans(operations)
-    if args.debug: print(spans)
+    if DEBUG: print(spans)
     chart = spans_to_chart(spans)
-    if args.debug: print(chart)
+    if DEBUG: print(chart)
     svg = chart_to_svg(chart)
-    if args.debug: print(svg)
+    if DEBUG: print(svg)
 
     with open(args.output, 'w') as f:
         f.write(svg)
