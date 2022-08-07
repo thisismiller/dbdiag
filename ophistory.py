@@ -81,12 +81,15 @@ def parse_operations(text):
 #### Data Model
 
 class Span(object):
-    def __init__(self, actor, x, y, width, text):
+    def __init__(self, actor, start, end, height, text):
         self.actor = actor
-        self.x = x
-        self.y = y
-        self.width = width
+        self.start = start
+        self.end = end
+        self.height = height
         self.text = text
+        self.x1 = None
+        self.x2 = None
+        self.y = None
 
     def __repr__(self):
         return '(%s, %s, %s, %s, %s)' % (repr(self.actor), repr(self.x),
@@ -112,7 +115,7 @@ class TokenBucket(object):
     def max_token(self):
         return self._max_token
 
-SpanStart = collections.namedtuple('SpanStart', ['op', 'x', 'y'])
+SpanStart = collections.namedtuple('SpanStart', ['op', 'start', 'height'])
 
 SpanInfo = collections.namedtuple('SpanInfo', ['spans', 'actors', 'depths'])
 
@@ -132,18 +135,19 @@ def operations_to_spans(operations):
         actorkey = (op.actor, op.key)
         if op.key is None:
             token = actor_depth[op.actor].acquire()
-            spans.append(Span(op.actor, idx, token, 1, (op.op, None)))
+            spans.append(Span(op.actor, idx+shortspans, idx+shortspans+1, token, (op.op, None)))
             actor_depth[op.actor].release(token)
             shortspans += 1
+            continue
         if actorkey not in inflight:
             token = actor_depth[op.actor].acquire()
             inflight[actorkey] = SpanStart(op.op, idx+shortspans, token)
         else:
             start = inflight[actorkey]
             del inflight[actorkey]
-            spans.append(Span(op.actor, start.x, start.y, idx - start.x,
-(start.op, op.op)))
-            actor_depth[op.actor].release(start.y)
+            x = idx + shortspans
+            spans.append(Span(op.actor, start.start, x, start.height, (start.op, op.op)))
+            actor_depth[op.actor].release(start.height)
 
     return SpanInfo(spans, actors_names, actor_depth)
 
@@ -169,7 +173,6 @@ def span_width(span):
     return ret
 
 def spans_to_chart(spaninfo):
-    span_width_ch = max(span_width(span) for span in spaninfo.spans)
     total_height = sum(v.max_token() for v in spaninfo.depths.values())
     actors = []
 
@@ -187,25 +190,39 @@ def spans_to_chart(spaninfo):
         base_heights[actor] = current_height
         current_height += spaninfo.depths[actor].max_token() + 1
 
-    current_width = max_actor_width + CH_ACTOR_SPAN_SEPARATION
-    spaninfo.spans.sort(key=lambda s: s.x)
     for span in spaninfo.spans:
-        span.width *= span_width_ch
-        span.x = span.x * span_width_ch + OUTER_BUFFER
-        current_width = max(current_width, span.x + span.width)
+        span.x1 = span.start * OUTER_BUFFER
+        span.x2 = span.x1 + span_width(span)
 
-        span.y = base_heights[span.actor] + span.y
-        span.y *= PX_SPAN_VERTICAL
+        span.y = (base_heights[span.actor] + span.height) * PX_SPAN_VERTICAL
+
+    made_change = True
+    while made_change:
+        made_change = False
+        for span in spaninfo.spans:
+            for other in spaninfo.spans:
+                if other.start < span.start and span.x1 < other.x1 + OUTER_BUFFER:
+                    made_change = True
+                    span.x1 = other.x1 + OUTER_BUFFER
+                    span.x2 = max(span.x2, span.x1 + span_width(span))
+                if other.end < span.start and span.x1 < other.x2 + OUTER_BUFFER:
+                    made_change = True
+                    span.x1 = other.x2 + OUTER_BUFFER
+                    span.x2 = max(span.x2, span.x1 + span_width(span))
+                if other.end < span.end and span.x2 < other.x2 + OUTER_BUFFER:
+                    made_change = True
+                    span.x2 = other.x2 + OUTER_BUFFER
 
     OFFSET_X = OUTER_BUFFER + max_actor_width + CH_ACTOR_SPAN_SEPARATION
     OFFSET_Y = PX_SPAN_VERTICAL
 
     for span in spaninfo.spans:
         # adjust to make room for actor panel
-        span.x += OFFSET_X
+        span.x1 += OFFSET_X
+        span.x2 += OFFSET_X
         span.y += OFFSET_Y
 
-    chart_width = current_width + OUTER_BUFFER + OFFSET_X
+    chart_width = max(span.x2 for span in spaninfo.spans) + OUTER_BUFFER
     chart_height = current_height * PX_SPAN_VERTICAL + OFFSET_Y + PX_CHAR_HEIGHT
     return Chart(actors, spaninfo.spans, chart_width, chart_height, max_actor_width)
 
@@ -227,26 +244,23 @@ def svg_actor(actor):
     return svgtext + '\n' + svgline
 
 def svg_span_line(span):
-    x = span.x
-    y = span.y
-    width = span.width
     return '\n'.join([
-        f'<line x1="{x}ch" y1="{y}px" x2="{x+width}ch" y2="{y}px" stroke="black" />',
-        f'<line x1="{x}ch" y1="{y-BARHEIGHT}px" x2="{x}ch" y2="{y+BARHEIGHT}px" stroke="black" />',
-        f'<line x1="{x+width}ch" y1="{y-BARHEIGHT}px" x2="{x+width}ch" y2="{y+BARHEIGHT}px" stroke="black" />'
+        f'<line x1="{span.x1}ch" y1="{span.y}px" x2="{span.x2}ch" y2="{span.y}px" stroke="black" />',
+        f'<line x1="{span.x1}ch" y1="{span.y-BARHEIGHT}px" x2="{span.x1}ch" y2="{span.y+BARHEIGHT}px" stroke="black" />',
+        f'<line x1="{span.x2}ch" y1="{span.y-BARHEIGHT}px" x2="{span.x2}ch" y2="{span.y+BARHEIGHT}px" stroke="black" />'
     ])
 
 def svg_span_text(span):
     left_text, right_text = span.text
     y = span.y - PX_LINE_TEXT_SEPARATION
     if left_text and right_text:
-        left_x = span.x + INNER_BUFFER
+        left_x = span.x1 + INNER_BUFFER
         left = f'<text text-anchor="start" alignment-baseline="baseline" x="{left_x}ch" y="{y}px">{left_text}</text>'
-        right_x = span.x + span.width - INNER_BUFFER
+        right_x = span.x2 - INNER_BUFFER
         right = f'<text text-anchor="end" alignment-baseline="baseline" x="{right_x}ch" y="{y}px">{right_text}</text>'
         return left + '\n' + right
     elif left_text or right_text:
-        x = span.x + span.width/2.0
+        x = span.x1 + (span.x2 - span.x1)/2.0
         text = left_text or right_text
         return f'<text text-anchor="middle" alignment-baseline="baseline" x="{x}ch" y="{y}px">{text}</text>'
     else:
