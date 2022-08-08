@@ -1,0 +1,33 @@
+<svg version="1.1" width="79ch" height="135px" xmlns="http://www.w3.org/2000/svg">
+<text text-anchor="middle" alignment-baseline="middle" font-family="monospace" x="4ch" y="41.0px">A</text>
+<line x1="8.0ch" y1="15px" x2="8.0ch" y2="67px" stroke="black" />
+<text text-anchor="middle" alignment-baseline="middle" font-family="monospace" x="4ch" y="86.0px">B</text>
+<line x1="8.0ch" y1="75px" x2="8.0ch" y2="97px" stroke="black" />
+<line x1="15ch" y1="90px" x2="24ch" y2="90px" stroke="black" />
+<line x1="15ch" y1="82px" x2="15ch" y2="98px" stroke="black" />
+<line x1="24ch" y1="82px" x2="24ch" y2="98px" stroke="black" />
+<text text-anchor="middle" alignment-baseline="baseline" x="19.5ch" y="86px">Push(z)</text>
+<line x1="32ch" y1="60px" x2="41ch" y2="60px" stroke="black" />
+<line x1="32ch" y1="52px" x2="32ch" y2="68px" stroke="black" />
+<line x1="41ch" y1="52px" x2="41ch" y2="68px" stroke="black" />
+<text text-anchor="middle" alignment-baseline="baseline" x="36.5ch" y="56px">Push(a)</text>
+<line x1="45ch" y1="60px" x2="54ch" y2="60px" stroke="black" />
+<line x1="45ch" y1="52px" x2="45ch" y2="68px" stroke="black" />
+<line x1="54ch" y1="52px" x2="54ch" y2="68px" stroke="black" />
+<circle cx="48.0ch" cy="60" r="3" />
+<text text-anchor="middle" alignment-baseline="baseline" x="49.5ch" y="56px">Push(b)</text>
+<line x1="58ch" y1="60px" x2="67ch" y2="60px" stroke="black" />
+<line x1="58ch" y1="52px" x2="58ch" y2="68px" stroke="black" />
+<line x1="67ch" y1="52px" x2="67ch" y2="68px" stroke="black" />
+<text text-anchor="middle" alignment-baseline="baseline" x="62.5ch" y="56px">Push(c)</text>
+<line x1="11ch" y1="30px" x2="71ch" y2="30px" stroke="black" />
+<line x1="11ch" y1="22px" x2="11ch" y2="38px" stroke="black" />
+<line x1="71ch" y1="22px" x2="71ch" y2="38px" stroke="black" />
+<text text-anchor="middle" alignment-baseline="baseline" x="41.0ch" y="26px">PushAll([a,b,c])</text>
+<line x1="28ch" y1="90px" x2="75ch" y2="90px" stroke="black" />
+<line x1="28ch" y1="82px" x2="28ch" y2="98px" stroke="black" />
+<line x1="75ch" y1="82px" x2="75ch" y2="98px" stroke="black" />
+<circle cx="51.0ch" cy="90" r="3" />
+<text text-anchor="start" alignment-baseline="baseline" x="29ch" y="86px">Pop()</text>
+<text text-anchor="end" alignment-baseline="baseline" x="74ch" y="86px">Ok(b)</text>
+</svg>

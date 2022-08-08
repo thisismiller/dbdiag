@@ -26,6 +26,7 @@ PX_LINE_TEXT_SEPARATION : UnitsPx = 4
 BARHEIGHT : UnitsPx = 8
 CH_ACTOR_SPAN_SEPARATION : UnitsCh = 6
 PX_ACTORBAR_SEPARATION : UnitsPx = 4
+PX_EVENT_RADIUS : UnitsPx = 3
 
 DEBUG = False
 
@@ -40,7 +41,7 @@ def parse_operations(text : str) -> list[Operation]:
     """Parse a text file of operations into list[Operation].
 
     TEXT := "[^"]+"                           # Quoted strings get " stripped
-          | [a-zA-Z0-9_(){}.]+                # Omit " for anything identifier-like
+          | [a-zA-Z0-9_(){},.]+                # Omit " for anything identifier-like
     COMMENT := #.*                            # '#' is still for comments
     SEPERATOR := NOTHING | : | .              # a foo, a: foo() or a.foo are all fine
     OPERATION := TEXT SEPERATOR? TEXT TEXT?   # Becomes: ACTOR seperator OP KEY
@@ -49,7 +50,7 @@ def parse_operations(text : str) -> list[Operation]:
           | OPERATION COMMENT?
     """
     operations = []
-    TEXT = r'"[^"]+"|[a-zA-Z0-9_(){}.]+'
+    TEXT = r'"[^"]+"|[a-zA-Z0-9_(){}\[\],.]+'
     RGX = f'(?P<actor>{TEXT}) *(:|\.)? *(?P<op>{TEXT}) *(?P<key>{TEXT})? *(#.*)?'
     for line in text.splitlines():
         line = line.strip('\n')
@@ -59,9 +60,13 @@ def parse_operations(text : str) -> list[Operation]:
         if not match:
             print(f'Line `{line}` must be of the form `actor: op key`.')
             raise RuntimeError('parse failure')
-        opname = match.group('op').strip('"')
+        opname = match.group('op')
         if opname == 'END':
             opname = None
+        if opname == 'EVENT':
+            # TODO: There's probably some fancier way to have sentinels
+            opname = 'EVENT'
+        opname = opname.strip('"') if opname else None
         operations.append(Operation(match.group('actor'), opname, match.group('key')))
     return operations
 
@@ -74,8 +79,10 @@ class Span(object):
     end : int
     height : int
     text : tuple[Optional[str], Optional[str]]
+    eventpoint : Optional[int]
     x1 : Optional[UnitsCh] = None
     x2 : Optional[UnitsCh] = None
+    event_x : Optional[UnitsCh] = None
     y : Optional[UnitsPx] = None
 
 class TokenBucket(object):
@@ -98,7 +105,12 @@ class TokenBucket(object):
     def max_token(self) -> int:
         return self._max_token
 
-SpanStart = collections.namedtuple('SpanStart', ['op', 'start', 'height'])
+@dataclasses.dataclass
+class SpanStart(object):
+    op : str
+    start : int
+    height : int
+    eventpoint : Optional[int] = None
 
 class SpanInfo(NamedTuple):
     spans : list[Span]
@@ -121,18 +133,19 @@ def operations_to_spans(operations : list[Operation]) -> SpanInfo:
         actorkey = (op.actor, op.key)
         if op.key is None:
             token = actor_depth[op.actor].acquire()
-            spans.append(Span(op.actor, idx+shortspans, idx+shortspans+1, token, (op.op, None)))
+            spans.append(Span(op.actor, idx+shortspans, idx+shortspans+1, token, (op.op, None), None))
             actor_depth[op.actor].release(token)
             shortspans += 1
-            continue
-        if actorkey not in inflight:
+        elif op.op == 'EVENT':
+            inflight[actorkey].eventpoint = idx + shortspans
+        elif actorkey not in inflight:
             token = actor_depth[op.actor].acquire()
             inflight[actorkey] = SpanStart(op.op, idx+shortspans, token)
         else:
             start = inflight[actorkey]
             del inflight[actorkey]
             x = idx + shortspans
-            spans.append(Span(op.actor, start.start, x, start.height, (start.op, op.op)))
+            spans.append(Span(op.actor, start.start, x, start.height, (start.op, op.op), start.eventpoint))
             actor_depth[op.actor].release(start.height)
 
     return SpanInfo(spans, actors_names, actor_depth)
@@ -179,6 +192,8 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
     for span in spaninfo.spans:
         span.x1 = span.start * OUTER_BUFFER
         span.x2 = span.x1 + span_width(span)
+        if span.eventpoint:
+            span.event_x = span.eventpoint * OUTER_BUFFER
 
         span.y = (base_heights[span.actor] + span.height) * PX_SPAN_VERTICAL
 
@@ -186,6 +201,7 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
     while made_change:
         made_change = False
         for span in spaninfo.spans:
+            beforeevent = afterevent = None
             for other in spaninfo.spans:
                 if other.start < span.start and span.x1 < other.x1 + OUTER_BUFFER:
                     made_change = True
@@ -198,6 +214,25 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
                 if other.end < span.end and span.x2 < other.x2 + OUTER_BUFFER:
                     made_change = True
                     span.x2 = other.x2 + OUTER_BUFFER
+                if span.eventpoint:
+                    if other.start == span.eventpoint-1:
+                        beforeevent = other.x1
+                    if other.end == span.eventpoint-1:
+                        beforeevent = other.x2
+                    if other.eventpoint == span.eventpoint-1:
+                        beforeevent = other.event_x
+                    if other.start == span.eventpoint+1:
+                        afterevent = other.x1
+                    if other.end == span.eventpoint+1:
+                        afterevent = other.x2
+                    if other.eventpoint == span.eventpoint+1:
+                        afterevent = other.event_x
+            if span.eventpoint:
+                if beforeevent is None or afterevent is None:
+                    made_change = True
+                elif span.event_x != (beforeevent + afterevent)/2:
+                    made_change = True
+                    span.event_x = (beforeevent + afterevent)/2
 
     OFFSET_X = OUTER_BUFFER + max_actor_width + CH_ACTOR_SPAN_SEPARATION
     OFFSET_Y = PX_SPAN_VERTICAL
@@ -207,6 +242,8 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
         span.x1 += OFFSET_X
         span.x2 += OFFSET_X
         span.y += OFFSET_Y
+        if span.event_x:
+            span.event_x += OFFSET_X
 
     chart_width = max(span.x2 for span in spaninfo.spans) + OUTER_BUFFER
     chart_height = current_height * PX_SPAN_VERTICAL + OFFSET_Y + PX_CHAR_HEIGHT
@@ -234,11 +271,14 @@ def svg_actor(actor : Actor) -> str:
     return '\n'.join(lines)
 
 def svg_span_line(span : Span) -> str:
-    return '\n'.join([
+    elements = [
         f'<line x1="{span.x1}ch" y1="{span.y}px" x2="{span.x2}ch" y2="{span.y}px" stroke="black" />',
         f'<line x1="{span.x1}ch" y1="{span.y-BARHEIGHT}px" x2="{span.x1}ch" y2="{span.y+BARHEIGHT}px" stroke="black" />',
         f'<line x1="{span.x2}ch" y1="{span.y-BARHEIGHT}px" x2="{span.x2}ch" y2="{span.y+BARHEIGHT}px" stroke="black" />'
-    ])
+    ]
+    if span.event_x:
+        elements.append(f'<circle cx="{span.event_x}ch" cy="{span.y}" r="{PX_EVENT_RADIUS}" />')
+    return '\n'.join(elements)
 
 def svg_span_text(span : Span) -> str:
     left_text, right_text = span.text

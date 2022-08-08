@@ -2,6 +2,10 @@
 
 Diagrams as text tools for databases and distributed systems
 
+[_ophistory_](#ophistory) lets you write a simple text file of operations starting and ending in order, and renders them like so:[^1]
+
+<img src="examples/ophistory_all.svg" />
+
 ## ophistory
 
 This tool is used to make diagrams for showing concurrent operations, modeled after those seen in [Linearizability: A correctness condition for concurrent objects](https://cs.brown.edu/~mph/HerlihyW90/p463-herlihy.pdf).
@@ -18,13 +22,14 @@ The `ACTOR` exists to group spans together.  It should either be the object bein
 
 The operation `END` is special, and not displayed.  The span will be shown with just one operation text centered over the span instead.  If an operation starts and immediately finishes, you may omit the `KEY`.  This is semantically equivalent to writing an immediately following line with an `END` operation.
 
+The operation `EVENT` is special, and will display a dot along the operation line that the given point.  This can be used to signify when the operation atomically occurred between its start and end, if needed.
+
 To reproduce the four FIFO queue histories from _S1.2 Motivation_:
 
 <table>
 <tbody>
 <tr>
   <td>
-
 <pre><code>
 A: E(x) a
 B: E(y)
@@ -72,4 +77,7 @@ C: END a
 </tr>
 </tbody>
 </table>
+
+[^1]: If you have e.g. log files from a system, and you're trying to build a visualization of the operations that ran in your system, please consider [shiviz](https://bestchai.bitbucket.io/shiviz/) instead.
+
 

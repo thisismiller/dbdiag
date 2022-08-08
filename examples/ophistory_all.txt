@@ -1,0 +1,13 @@
+A: PushAll([a,b,c]) ALL
+B: Push(z)
+B: Pop() BZ
+A: Push(a) A
+A: END A
+A: Push(b) B
+A: EVENT B
+B: EVENT BZ
+A: END B
+A: Push(c) C
+A: END C
+A: END ALL
+B: Ok(b) BZ
