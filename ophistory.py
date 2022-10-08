@@ -8,6 +8,7 @@ import re
 import sys
 from typing import NamedTuple, Optional, TypeAlias
 
+
 class Point(NamedTuple):
     x: int
     y: int = 1  # Set default value
@@ -336,8 +337,17 @@ def main(argv):
     svg = chart_to_svg(chart)
     if DEBUG: print(svg)
 
-    with open(args.output, 'w') as f:
-        f.write(svg)
+    if args.output is None or args.output == '-':
+        sys.stdout.write(svg)
+    elif args.output.endswith('.svg'):
+        with open(args.output, 'w') as f:
+            f.write(svg)
+    elif args.output.endswith('.png'):
+        # A yet-to-be-released version of cairosvg is required to correctly
+        # render the SVGs produced, so make it a runtime requirement.
+        from cairosvg import svg2png
+        svg2png(bytestring=svg, write_to=args.output)
+
 
 if __name__ == '__main__':
     main(sys.argv)
