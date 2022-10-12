@@ -10,7 +10,9 @@ Diagrams as text tools for databases and distributed systems
 
 This tool is used to make diagrams for showing concurrent operations, modeled after those seen in [Linearizability: A correctness condition for concurrent objects](https://cs.brown.edu/~mph/HerlihyW90/p463-herlihy.pdf).
 
-It may be invoked as `ophistory.py <input_file> -o <output_file.svg>`.
+It may be invoked as `ophistory.py [--embed] <input_file> -o <output_file.svg>`.
+
+By default, the SVG uses the `ch` and `em` units to scale with the text size of the document.  This does not work well with any viewers or tools other than a webbrowser, so `--embed` causes only `px` to be used as units, and the font size fixed to `12px` so that lines match up with text.
 
 The input file follows a similar syntax as the paper as well.  Each line has three parts:
 

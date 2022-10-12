@@ -6,13 +6,14 @@ import collections
 import dataclasses
 import re
 import sys
+import textwrap
 from typing import NamedTuple, Optional, TypeAlias
 
 
 class Point(NamedTuple):
     x: int
     y: int = 1  # Set default value
-       
+
 UnitsCh : TypeAlias = int
 UnitsEm : TypeAlias = int
 UnitsPx : TypeAlias = int
@@ -28,8 +29,10 @@ BARHEIGHT : UnitsPx = 8
 CH_ACTOR_SPAN_SEPARATION : UnitsCh = 6
 PX_ACTORBAR_SEPARATION : UnitsPx = 4
 PX_EVENT_RADIUS : UnitsPx = 3
+CH_WIDTH_IN_PX = 7
 
 DEBUG = False
+EMBED = False
 
 #### Parser
 
@@ -151,6 +154,24 @@ def operations_to_spans(operations : list[Operation]) -> SpanInfo:
 
     return SpanInfo(spans, actors_names, actor_depth)
 
+class Dimension(object):
+    def __init__(self, dist, unit):
+        self._dist = dist
+        self._unit = unit
+
+    def __str__(self):
+        if EMBED and self._unit == 'ch':
+            return f'{self._dist * CH_WIDTH_IN_PX}px'
+        else:
+            return f'{self._dist}{self._unit}'
+
+    @staticmethod
+    def from_ch(ch : UnitsCh) -> 'Dimension':
+        return Dimension(ch, 'ch')
+
+    @staticmethod
+    def from_px(px : UnitsPx) -> 'Dimension':
+        return Dimension(px, 'px')
 
 class Actor(NamedTuple):
     name : str
@@ -162,8 +183,8 @@ class Actor(NamedTuple):
 class Chart(NamedTuple):
     actors : list[Actor]
     spans : list[Span]
-    width : UnitsCh
-    height : UnitsPx
+    width : Dimension
+    height : Dimension
     max_actor_width : UnitsCh
 
 def span_width(span : Span) -> int:
@@ -248,52 +269,64 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
 
     chart_width = max(span.x2 for span in spaninfo.spans) + OUTER_BUFFER
     chart_height = current_height * PX_SPAN_VERTICAL + OFFSET_Y + PX_CHAR_HEIGHT
-    return Chart(actors, spaninfo.spans, chart_width, chart_height, max_actor_width)
+    return Chart(actors, spaninfo.spans, Dimension.from_ch(chart_width), Dimension.from_px(chart_height), max_actor_width)
 
 #### Renderer
 
-def svg_header(width : UnitsCh, height : UnitsPx) -> str:
-    return f'''<svg version="1.1" width="{width}ch" height="{height}px" xmlns="http://www.w3.org/2000/svg">'''
+def svg_header(width : Dimension, height : Dimension) -> str:
+    header = f'''<svg version="1.1" width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">'''
+    if EMBED:
+        header += textwrap.dedent("""
+        <defs>
+            <style type="text/css">
+            text {
+                font-size: 12px;
+                font-family: monospace;
+            }
+            </style>
+        </defs>""")
+    return header
 
 def svg_footer() -> str:
     return '</svg>'
 
 def svg_actor(actor : Actor) -> str:
     lines = []
-    text_y = actor.y + actor.height / 2
-    lines.append(f'<text text-anchor="middle" alignment-baseline="middle" font-family="monospace" x="{actor.x}ch" y="{text_y}px">{actor.name}</text>')
-    line_x = actor.x + actor.width + CH_ACTOR_SPAN_SEPARATION / 2
-    top_y = actor.y + PX_ACTORBAR_SEPARATION
-    bottom_y = actor.y + actor.height - PX_ACTORBAR_SEPARATION
-    lines.append(f'<line x1="{line_x}ch" y1="{top_y}px" x2="{line_x}ch" y2="{bottom_y}px" stroke="black" />')
+    text_x = Dimension.from_ch(actor.x)
+    text_y = Dimension.from_px(actor.y + actor.height / 2)
+    lines.append(f'<text text-anchor="middle" alignment-baseline="middle" font-family="monospace" x="{text_x}" y="{text_y}">{actor.name}</text>')
+    line_x = Dimension.from_ch(actor.x + actor.width + CH_ACTOR_SPAN_SEPARATION / 2)
+    top_y = Dimension.from_px(actor.y + PX_ACTORBAR_SEPARATION)
+    bottom_y = Dimension.from_px(actor.y + actor.height - PX_ACTORBAR_SEPARATION)
+    lines.append(f'<line x1="{line_x}" y1="{top_y}" x2="{line_x}" y2="{bottom_y}" stroke="black" />')
     if DEBUG:
-        lines.append(f'<line x1="0%" y1="{top_y}px" x2="100%" y2="{top_y}px" stroke="black" />')
-        lines.append(f'<line x1="0%" y1="{bottom_y}px" x2="100%" y2="{bottom_y}px" stroke="black" />')
+        lines.append(f'<line x1="0%" y1="{top_y}" x2="100%" y2="{top_y}" stroke="black" />')
+        lines.append(f'<line x1="0%" y1="{bottom_y}" x2="100%" y2="{bottom_y}" stroke="black" />')
     return '\n'.join(lines)
 
 def svg_span_line(span : Span) -> str:
     elements = [
-        f'<line x1="{span.x1}ch" y1="{span.y}px" x2="{span.x2}ch" y2="{span.y}px" stroke="black" />',
-        f'<line x1="{span.x1}ch" y1="{span.y-BARHEIGHT}px" x2="{span.x1}ch" y2="{span.y+BARHEIGHT}px" stroke="black" />',
-        f'<line x1="{span.x2}ch" y1="{span.y-BARHEIGHT}px" x2="{span.x2}ch" y2="{span.y+BARHEIGHT}px" stroke="black" />'
+        f'<line x1="{Dimension.from_ch(span.x1)}" y1="{span.y}px" x2="{Dimension.from_ch(span.x2)}" y2="{span.y}px" stroke="black" />',
+        f'<line x1="{Dimension.from_ch(span.x1)}" y1="{span.y-BARHEIGHT}px" x2="{Dimension.from_ch(span.x1)}" y2="{span.y+BARHEIGHT}px" stroke="black" />',
+        f'<line x1="{Dimension.from_ch(span.x2)}" y1="{span.y-BARHEIGHT}px" x2="{Dimension.from_ch(span.x2)}" y2="{span.y+BARHEIGHT}px" stroke="black" />'
     ]
     if span.event_x:
-        elements.append(f'<circle cx="{span.event_x}ch" cy="{span.y}" r="{PX_EVENT_RADIUS}" />')
+        elements.append(f'<circle cx="{Dimension.from_ch(span.event_x)}" cy="{span.y}" r="{PX_EVENT_RADIUS}" />')
     return '\n'.join(elements)
 
 def svg_span_text(span : Span) -> str:
     left_text, right_text = span.text
-    y = span.y - PX_LINE_TEXT_SEPARATION
+    y = Dimension.from_px(span.y - PX_LINE_TEXT_SEPARATION)
     if left_text and right_text:
-        left_x = span.x1 + INNER_BUFFER
-        left = f'<text text-anchor="start" alignment-baseline="baseline" x="{left_x}ch" y="{y}px">{left_text}</text>'
-        right_x = span.x2 - INNER_BUFFER
-        right = f'<text text-anchor="end" alignment-baseline="baseline" x="{right_x}ch" y="{y}px">{right_text}</text>'
+        left_x = Dimension.from_ch(span.x1 + INNER_BUFFER)
+        left = f'<text text-anchor="start" alignment-baseline="baseline" x="{left_x}" y="{y}">{left_text}</text>'
+        right_x = Dimension.from_ch(span.x2 - INNER_BUFFER)
+        right = f'<text text-anchor="end" alignment-baseline="baseline" x="{right_x}" y="{y}">{right_text}</text>'
         return left + '\n' + right
     elif left_text or right_text:
-        x = span.x1 + (span.x2 - span.x1)/2.0
+        x = Dimension.from_ch(span.x1 + (span.x2 - span.x1)/2.0)
         text = left_text or right_text
-        return f'<text text-anchor="middle" alignment-baseline="baseline" x="{x}ch" y="{y}px">{text}</text>'
+        return f'<text text-anchor="middle" alignment-baseline="baseline" x="{x}" y="{y}">{text}</text>'
     else:
         return ''
 
@@ -316,7 +349,8 @@ def parse_args(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('file', help='file of operations')
     parser.add_argument('-o', '--output', help='output file path')
-    parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--debug', action='store_true', help='add extra lines to debug alignment issues')
+    parser.add_argument('--embed', action='store_true', help='only use 12px font and px units')
     return parser.parse_args()
 
 def main(argv):
@@ -325,6 +359,9 @@ def main(argv):
     if args.debug:
         global DEBUG
         DEBUG = True
+    if args.embed:
+        global EMBED
+        EMBED = True
 
     with open(args.file) as f:
         operations = parse_operations(f.read())
