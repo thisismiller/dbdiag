@@ -355,6 +355,8 @@ def parse_args(argv):
 
 def input_to_output(text_input):
     operations = parse_operations(text_input)
+    if not operations:
+        return ""
     if DEBUG: print(operations)
     spans = operations_to_spans(operations)
     if DEBUG: print(spans)
