@@ -353,6 +353,17 @@ def parse_args(argv):
     parser.add_argument('--embed', action='store_true', help='only use 12px font and px units')
     return parser.parse_args()
 
+def input_to_output(text_input):
+    operations = parse_operations(text_input)
+    if DEBUG: print(operations)
+    spans = operations_to_spans(operations)
+    if DEBUG: print(spans)
+    chart = spans_to_chart(spans)
+    if DEBUG: print(chart)
+    svg = chart_to_svg(chart)
+    if DEBUG: print(svg)
+    return svg
+
 def main(argv):
     args = parse_args(argv)
 
@@ -364,15 +375,9 @@ def main(argv):
         EMBED = True
 
     with open(args.file) as f:
-        operations = parse_operations(f.read())
+        text_input = f.read()
 
-    if DEBUG: print(operations)
-    spans = operations_to_spans(operations)
-    if DEBUG: print(spans)
-    chart = spans_to_chart(spans)
-    if DEBUG: print(chart)
-    svg = chart_to_svg(chart)
-    if DEBUG: print(svg)
+    svg = input_to_output(text_input)
 
     if args.output is None or args.output == '-':
         sys.stdout.write(svg)
