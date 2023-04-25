@@ -62,8 +62,7 @@ def parse_operations(text : str) -> list[Operation]:
             continue
         match = re.fullmatch(RGX, line)
         if not match:
-            print(f'Line `{line}` must be of the form `actor: op key`.')
-            raise RuntimeError('parse failure')
+            raise RuntimeError('Parse Failure: Line `{line}` must be of the form `actor: op key`.')
         opname = match.group('op')
         if opname == 'END':
             opname = None
@@ -283,6 +282,11 @@ def svg_header(width : Dimension, height : Dimension) -> str:
                 font-size: 12px;
                 font-family: monospace;
             }
+            @media (prefers-color-scheme: dark) {
+                text {
+                    color: #eceff4;
+                }
+            }
             </style>
         </defs>""")
     return header
@@ -354,7 +358,10 @@ def parse_args(argv):
     return parser.parse_args()
 
 def input_to_output(text_input):
-    operations = parse_operations(text_input)
+    try:
+        operations = parse_operations(text_input)
+    except RuntimeError as e:
+        return str(e)
     if not operations:
         return ""
     if DEBUG: print(operations)
