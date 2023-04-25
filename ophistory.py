@@ -284,7 +284,7 @@ def svg_header(width : Dimension, height : Dimension) -> str:
             }
             @media (prefers-color-scheme: dark) {
                 text {
-                    color: #eceff4;
+                    fill: #eceff4;
                 }
             }
             </style>
