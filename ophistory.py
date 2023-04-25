@@ -286,6 +286,9 @@ def svg_header(width : Dimension, height : Dimension) -> str:
                 text {
                     fill: #eceff4;
                 }
+                line {
+                    stroke: #eceff4;
+                }
             }
             </style>
         </defs>""")
