@@ -274,14 +274,9 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
 
 def svg_header(width : Dimension, height : Dimension) -> str:
     header = f'''<svg version="1.1" width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">'''
-    if EMBED:
-        header += textwrap.dedent("""
-        <defs>
-            <style type="text/css">
-            text {
-                font-size: 12px;
-                font-family: monospace;
-            }
+    header += textwrap.dedent("""
+    <defs>
+        <style type="text/css">
             @media (prefers-color-scheme: dark) {
                 text {
                     fill: #eceff4;
@@ -289,7 +284,14 @@ def svg_header(width : Dimension, height : Dimension) -> str:
                 line {
                     stroke: #eceff4;
                 }
-            }
+            }""")
+    if EMBED:
+        header += textwrap.dedent("""
+            text {
+                font-size: 12px;
+                font-family: monospace;
+            }""")
+    header += textwrap.dedent("""
             </style>
         </defs>""")
     return header

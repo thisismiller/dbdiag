@@ -1,4 +1,16 @@
 <svg version="1.1" width="35ch" height="105px" xmlns="http://www.w3.org/2000/svg">
+<defs>
+    <style type="text/css">
+        @media (prefers-color-scheme: dark) {
+            text {
+                fill: #eceff4;
+            }
+            line {
+                stroke: #eceff4;
+            }
+        }
+    </style>
+</defs>
 <text text-anchor="middle" alignment-baseline="middle" font-family="monospace" x="4ch" y="26.0px">A</text>
 <line x1="8.0ch" y1="15px" x2="8.0ch" y2="37px" stroke="black" />
 <text text-anchor="middle" alignment-baseline="middle" font-family="monospace" x="4ch" y="56.0px">B</text>
