@@ -4,7 +4,7 @@ Diagrams as text tools for databases and distributed systems
 
 [_ophistory_](#ophistory) lets you write a simple text file of operations starting and ending in order, and renders them like so:[^1]
 
-<img src="examples/ophistory_all.svg" />
+<img src="docs/ophistory_all.svg" />
 
 ## ophistory
 
@@ -41,7 +41,7 @@ A: D(y)
 A: E(z)
 </code></pre>
   </td>
-  <td><img src="examples/linearizability_1.2.a.svg" /></td>
+  <td><img src="docs/linearizability_1.2.a.svg" /></td>
 </tr>
   <td>
 <pre><code>
@@ -52,7 +52,7 @@ B: END a
 A: END a
 </code></pre>
   </td>
-  <td><img src="examples/linearizability_1.2.b.svg" /></td>
+  <td><img src="docs/linearizability_1.2.b.svg" /></td>
 </tr>
   <td>
 <pre><code>
@@ -61,7 +61,7 @@ B: D(x)
 A: END a
 </code></pre>
   </td>
-  <td><img src="examples/linearizability_1.2.c.svg" /></td>
+  <td><img src="docs/linearizability_1.2.c.svg" /></td>
 </tr>
   <td>
 <pre><code>
@@ -75,7 +75,7 @@ A: END a
 C: END a
 </code></pre>
   </td>
-  <td><img src="examples/linearizability_1.2.d.svg" /></td>
+  <td><img src="docs/linearizability_1.2.d.svg" /></td>
 </tr>
 </tbody>
 </table>

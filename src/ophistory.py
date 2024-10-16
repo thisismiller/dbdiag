@@ -75,19 +75,6 @@ def parse_operations(text : str) -> list[Operation]:
 
 #### Data Model
 
-@dataclasses.dataclass
-class Span(object):
-    actor : str
-    start : int
-    end : int
-    height : int
-    text : tuple[Optional[str], Optional[str]]
-    eventpoint : Optional[int]
-    x1 : Optional[UnitsCh] = None
-    x2 : Optional[UnitsCh] = None
-    event_x : Optional[UnitsCh] = None
-    y : Optional[UnitsPx] = None
-
 class TokenBucket(object):
     def __init__(self):
         self._tokens = []
@@ -107,6 +94,19 @@ class TokenBucket(object):
 
     def max_token(self) -> int:
         return self._max_token
+
+@dataclasses.dataclass
+class Span(object):
+    actor : str
+    start : int
+    end : int
+    height : int
+    text : tuple[Optional[str], Optional[str]]
+    eventpoint : Optional[int]
+    x1 : Optional[UnitsCh] = None
+    x2 : Optional[UnitsCh] = None
+    event_x : Optional[UnitsCh] = None
+    y : Optional[UnitsPx] = None
 
 @dataclasses.dataclass
 class SpanStart(object):
