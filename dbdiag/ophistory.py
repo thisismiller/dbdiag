@@ -34,44 +34,6 @@ CH_WIDTH_IN_PX = 7
 DEBUG = False
 EMBED = False
 
-#### Parser
-
-class Operation(NamedTuple):
-    actor: str
-    op: str
-    key: Optional[str]
-
-def parse_operations(text : str) -> list[Operation]:
-    """Parse a text file of operations into list[Operation].
-
-    TEXT := "[^"]+"                           # Quoted strings get " stripped
-          | [a-zA-Z0-9_(){},.]+                # Omit " for anything identifier-like
-    COMMENT := #.*                            # '#' is still for comments
-    SEPERATOR := NOTHING | : | .              # a foo, a: foo() or a.foo are all fine
-    OPERATION := TEXT SEPERATOR? TEXT TEXT?   # Becomes: ACTOR seperator OP KEY
-    LINE := NOTHING
-          | COMMENT
-          | OPERATION COMMENT?
-    """
-    operations = []
-    TEXT = r'"[^"]+"|[a-zA-Z0-9_(){}\[\],.]+'
-    RGX = f'(?P<actor>{TEXT}) *(:|\.)? *(?P<op>{TEXT}) *(?P<key>{TEXT})? *(#.*)?'
-    for line in text.splitlines():
-        line = line.strip('\n')
-        if not line or line.startswith('#'):
-            continue
-        match = re.fullmatch(RGX, line)
-        if not match:
-            raise RuntimeError('Parse Failure: Line `{line}` must be of the form `actor: op key`.')
-        opname = match.group('op')
-        if opname == 'END':
-            opname = None
-        if opname == 'EVENT':
-            # TODO: There's probably some fancier way to have sentinels
-            opname = 'EVENT'
-        opname = opname.strip('"') if opname else None
-        operations.append(Operation(match.group('actor'), opname, match.group('key')))
-    return operations
 
 #### Data Model
 
@@ -121,7 +83,7 @@ class SpanInfo(NamedTuple):
     depths : dict[str, TokenBucket]
 
 def operations_to_spans(operations : list[Operation]) -> SpanInfo:
-    inflight : dict[str, SpanStart]= {}
+    inflight : dict[str, SpanStart] = {}
     actors_names : list[str] = []
     actor_depth : dict[str, TokenBucket] = {}
     spans : list[Span] = []
