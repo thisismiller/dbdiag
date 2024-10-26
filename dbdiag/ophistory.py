@@ -8,6 +8,7 @@ import re
 import sys
 import textwrap
 from typing import NamedTuple, Optional, TypeAlias
+from . import parser, spans
 
 
 class Point(NamedTuple):
@@ -37,84 +38,6 @@ EMBED = False
 
 #### Data Model
 
-class TokenBucket(object):
-    def __init__(self):
-        self._tokens = []
-        self._max_token = -1
-
-    def acquire(self) -> int:
-        if self._tokens:
-            token = self._tokens[0]
-            self._tokens.pop(0)
-        else:
-            self._max_token += 1
-            token = self._max_token
-        return token
-
-    def release(self, token : int) -> None:
-        bisect.insort(self._tokens, token)
-
-    def max_token(self) -> int:
-        return self._max_token
-
-@dataclasses.dataclass
-class Span(object):
-    actor : str
-    start : int
-    end : int
-    height : int
-    text : tuple[Optional[str], Optional[str]]
-    eventpoint : Optional[int]
-    x1 : Optional[UnitsCh] = None
-    x2 : Optional[UnitsCh] = None
-    event_x : Optional[UnitsCh] = None
-    y : Optional[UnitsPx] = None
-
-@dataclasses.dataclass
-class SpanStart(object):
-    op : str
-    start : int
-    height : int
-    eventpoint : Optional[int] = None
-
-class SpanInfo(NamedTuple):
-    spans : list[Span]
-    actors : list[str]
-    depths : dict[str, TokenBucket]
-
-def operations_to_spans(operations : list[Operation]) -> SpanInfo:
-    inflight : dict[str, SpanStart] = {}
-    actors_names : list[str] = []
-    actor_depth : dict[str, TokenBucket] = {}
-    spans : list[Span] = []
-    shortspans : int = 0
-
-    for idx, op in enumerate(operations):
-        if op.actor not in actors_names:
-            actors_names.append(op.actor)
-        if op.actor not in actor_depth:
-            actor_depth[op.actor] = TokenBucket()
-
-        actorkey = (op.actor, op.key)
-        if op.key is None:
-            token = actor_depth[op.actor].acquire()
-            spans.append(Span(op.actor, idx+shortspans, idx+shortspans+1, token, (op.op, None), None))
-            actor_depth[op.actor].release(token)
-            shortspans += 1
-        elif op.op == 'EVENT':
-            inflight[actorkey].eventpoint = idx + shortspans
-        elif actorkey not in inflight:
-            token = actor_depth[op.actor].acquire()
-            inflight[actorkey] = SpanStart(op.op, idx+shortspans, token)
-        else:
-            start = inflight[actorkey]
-            del inflight[actorkey]
-            x = idx + shortspans
-            spans.append(Span(op.actor, start.start, x, start.height, (start.op, op.op), start.eventpoint))
-            actor_depth[op.actor].release(start.height)
-
-    return SpanInfo(spans, actors_names, actor_depth)
-
 class Dimension(object):
     def __init__(self, dist, unit):
         self._dist = dist
@@ -143,19 +66,19 @@ class Actor(NamedTuple):
 
 class Chart(NamedTuple):
     actors : list[Actor]
-    spans : list[Span]
+    spans : list[spans.Span]
     width : Dimension
     height : Dimension
     max_actor_width : UnitsCh
 
-def span_width(span : Span) -> int:
+def span_width(span : spans.Span) -> int:
     (left, right) = span.text
     chars = len(left or "") + len(right or "")
     both = left and right
     ret = chars + (INNER_INNER_BUFFER if both else 0) + INNER_BUFFER * 2
     return ret
 
-def spans_to_chart(spaninfo : SpanInfo) -> Chart:
+def spans_to_chart(spaninfo : spans.SpanInfo) -> Chart:
     actors = []
 
     max_actor_width = max(len(actor) for actor in spaninfo.actors)
@@ -166,11 +89,11 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
         actor_x = OUTER_BUFFER # + max_actor_width/2
         actor_y = PX_SPAN_VERTICAL + current_height * PX_SPAN_VERTICAL - PX_LINE_TEXT_SEPARATION - PX_CHAR_HEIGHT
         actor_width = max_actor_width
-        actor_height = (spaninfo.depths[actor].max_token() + 1) * PX_SPAN_VERTICAL
+        actor_height = (spaninfo.depths[actor]) * PX_SPAN_VERTICAL
         actors.append(Actor(actor, actor_x, actor_y, actor_width, actor_height))
 
         base_heights[actor] = current_height
-        current_height += spaninfo.depths[actor].max_token() + 1
+        current_height += spaninfo.depths[actor]
 
     for span in spaninfo.spans:
         span.x1 = span.start * OUTER_BUFFER
@@ -275,7 +198,7 @@ def svg_actor(actor : Actor) -> str:
         lines.append(f'<line x1="0%" y1="{bottom_y}" x2="100%" y2="{bottom_y}" stroke="black" />')
     return '\n'.join(lines)
 
-def svg_span_line(span : Span) -> str:
+def svg_span_line(span : spans.Span) -> str:
     elements = [
         f'<line x1="{Dimension.from_ch(span.x1)}" y1="{span.y}px" x2="{Dimension.from_ch(span.x2)}" y2="{span.y}px" stroke="black" />',
         f'<line x1="{Dimension.from_ch(span.x1)}" y1="{span.y-BARHEIGHT}px" x2="{Dimension.from_ch(span.x1)}" y2="{span.y+BARHEIGHT}px" stroke="black" />',
@@ -285,7 +208,7 @@ def svg_span_line(span : Span) -> str:
         elements.append(f'<circle cx="{Dimension.from_ch(span.event_x)}" cy="{span.y}" r="{PX_EVENT_RADIUS}" />')
     return '\n'.join(elements)
 
-def svg_span_text(span : Span) -> str:
+def svg_span_text(span : spans.Span) -> str:
     left_text, right_text = span.text
     y = Dimension.from_px(span.y - PX_LINE_TEXT_SEPARATION)
     if left_text and right_text:
@@ -301,7 +224,7 @@ def svg_span_text(span : Span) -> str:
     else:
         return ''
 
-def svg_span(span : Span) -> str:
+def svg_span(span : spans.Span) -> str:
     return svg_span_line(span) + '\n' + svg_span_text(span)
 
 def chart_to_svg(chart : Chart) -> str:
@@ -326,15 +249,15 @@ def parse_args(argv):
 
 def input_to_output(text_input):
     try:
-        operations = parse_operations(text_input)
+        operations = parser.parse_operations(text_input)
     except RuntimeError as e:
         return str(e)
     if not operations:
         return ""
     if DEBUG: print(operations)
-    spans = operations_to_spans(operations)
-    if DEBUG: print(spans)
-    chart = spans_to_chart(spans)
+    spaninfo = spans.operations_to_spans(operations)
+    if DEBUG: print(spaninfo)
+    chart = spans_to_chart(spaninfo)
     if DEBUG: print(chart)
     svg = chart_to_svg(chart)
     if DEBUG: print(svg)
