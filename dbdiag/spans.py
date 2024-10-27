@@ -97,6 +97,22 @@ class Dimension(object):
         else:
             return f'{self._dist}{self._unit}'
 
+    def __add__(self, x : 'Dimension') -> 'Dimension':
+        assert self._unit == x._unit
+        return Dimension(self._dist + x._dist, self._unit)
+
+    def __ladd__(self, x : 'Dimension'):
+        assert self._unit == x._unit
+        self._dist += x._dist
+
+    def __sub__(self, x : 'Dimension') -> 'Dimension':
+        assert self._unit == x._unit
+        return Dimension(self._dist - x._dist, self._unit)
+
+    def __lsub__(self, x : 'Dimension'):
+        assert self._unit == x._unit
+        self._dist -= x._dist
+
     @staticmethod
     def from_ch(ch : UnitsCh) -> 'Dimension':
         return Dimension(ch, 'ch')
@@ -104,6 +120,10 @@ class Dimension(object):
     @staticmethod
     def from_px(px : UnitsPx) -> 'Dimension':
         return Dimension(px, 'px')
+
+    @staticmethod
+    def from_percent(p : UnitsPercent) -> 'Dimension':
+        return Dimension(p, '%')
 
 class Actor(NamedTuple):
     name : str
@@ -205,33 +225,6 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
 
 #### Renderer
 
-def svg_header(width : Dimension, height : Dimension) -> str:
-    header = f'''<svg version="1.1" width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">'''
-    header += textwrap.dedent("""
-    <defs>
-        <style type="text/css">
-            @media (prefers-color-scheme: dark) {
-                text {
-                    fill: #eceff4;
-                }
-                line {
-                    stroke: #eceff4;
-                }
-            }""")
-    if EMBED:
-        header += textwrap.dedent("""
-            text {
-                font-size: 12px;
-                font-family: monospace;
-            }""")
-    header += textwrap.dedent("""
-            </style>
-        </defs>""")
-    return header
-
-def svg_footer() -> str:
-    return '</svg>'
-
 class SVG(object):
     class XAlign(enum.StrEnum):
         START = "start"
@@ -243,12 +236,38 @@ class SVG(object):
         MIDDLE = "middle"
         BOTTOM = "baseline"
 
+    def _svg_header(self, width : Dimension, height : Dimension) -> str:
+        header = f'''<svg version="1.1" width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">'''
+        header += textwrap.dedent("""
+        <defs>
+            <style type="text/css">
+                @media (prefers-color-scheme: dark) {
+                    text {
+                        fill: #eceff4;
+                    }
+                    line {
+                        stroke: #eceff4;
+                    }
+                }""")
+        if EMBED:
+            header += textwrap.dedent("""
+                text {
+                    font-size: 12px;
+                    font-family: monospace;
+                }""")
+        header += textwrap.dedent("""
+                </style>
+            </defs>""")
+        return header
+
+    def _svg_footer(self) -> str:
+        return '</svg>'
+
     def __init__(self, width : Dimension, height : Dimension):
         super()
         self._width = width
         self._height = height
-        self._svg = []
-        self._svg.append(svg_header(self._width, self._height))
+        self._svg = [self._svg_header(self._width, self._height)]
         self._rendered = None
     
     def line(self, x1 : Dimension, y1 : Dimension, x2 : Dimension, y2 : Dimension):
@@ -270,22 +289,22 @@ class SVG(object):
     def render(self):
         if self._rendered:
             return self._rendered
-        self._svg.append(svg_footer())
+        self._svg.append(self._svg_footer())
         self._rendered = '\n'.join(self._svg)
         return self._rendered
 
 def svg_actor(svg : SVG, actor : Actor) -> str:
     lines = []
-    text_x = Dimension.from_ch(actor.x)
+    text_x = Dimension.from_ch(actor.x + actor.width)
     text_y = Dimension.from_px(actor.y + actor.height / 2)
-    svg.text(text_x, text_y, SVG.XAlign.MIDDLE, SVG.YAlign.MIDDLE, actor.name, font="monospace")
+    svg.text(text_x, text_y, SVG.XAlign.END, SVG.YAlign.MIDDLE, actor.name, font="monospace")
     line_x = Dimension.from_ch(actor.x + actor.width + CH_ACTOR_SPAN_SEPARATION / 2)
     top_y = Dimension.from_px(actor.y + PX_ACTORBAR_SEPARATION)
     bottom_y = Dimension.from_px(actor.y + actor.height - PX_ACTORBAR_SEPARATION)
     svg.line(line_x, top_y, line_x, bottom_y)
     if DEBUG:
-        svg.line('0%', top_y, '100%', top_y)
-        svg.line('0%', bottom_y, '100%', bottom_y)
+        svg.line(Dimension.from_percent(0), top_y, Dimension.from_percent(100), top_y)
+        svg.line(Dimension.from_percent(0), bottom_y, Dimension.from_percent(100), bottom_y)
     return '\n'.join(lines)
 
 def svg_span(svg : SVG, span : Span) -> str:

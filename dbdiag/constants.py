@@ -3,6 +3,7 @@ from typing import TypeAlias
 UnitsCh : TypeAlias = int
 UnitsEm : TypeAlias = int
 UnitsPx : TypeAlias = int
+UnitsPercent : TypeAlias = int
 
 # OUTER_BUFFER | INNER_BUFFER <text> INNER_INNER_BUFFER <text> INNER_BUFFER |
 INNER_BUFFER : UnitsCh = 1
