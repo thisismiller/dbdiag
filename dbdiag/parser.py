@@ -1,3 +1,4 @@
+import base64
 import re
 from enum import Enum
 from typing import NamedTuple, Optional, TypeAlias, List
@@ -125,13 +126,11 @@ def parse_operations(text : str) -> AST:
         if result.get('grouping') == '[':
             if grouplist is not None:
                 raise RuntimeError('Groupings [] cannot be nested.')
-            print('Starting group')
             grouplist = []
             continue
         if result.get('grouping') == ']':
             if grouplist is None:
                 raise RuntimeError('Unbalanced []. Terminating grouping that was not started.')
-            print('Ending group')
             operations.append(grouplist)
             grouplist = None
             continue
@@ -148,3 +147,40 @@ def parse_operations(text : str) -> AST:
     if grouplist is not None:
         raise RuntimeError('EOF with unbalanced []. Terminating grouping that was not started.')
     return operations
+
+def unsugar_operations(operations : AST) -> AST:
+    ops : list[list[Operation]] = []
+    
+    # Desugar raw operations into a single operation group
+    for op in operations:
+        if not isinstance(op, list):
+            ops.append([op])
+        else:
+            ops.append(op)
+    
+    def generate_key_fn():
+        counter = -1
+        def fn():
+            nonlocal counter
+            counter += 1
+            return '__' + str(counter)
+        return fn
+    generate_key = generate_key_fn()
+    
+    # Desugar key-less operations into a start immediately followed by an end.
+    for gidx, group in enumerate(ops):
+        short_ops = []
+        for opidx, op in enumerate(group):
+            if op.key is None:
+                newkey = generate_key()
+                newstart = op._replace(key=newkey)
+                newend = newstart._replace(op=None)
+                short_ops.append(newend)
+                ops[gidx][opidx] = newstart
+        if short_ops:
+            ops.insert(gidx+1, short_ops)
+    return ops
+
+def parse(text):
+    raw_ast = parse_operations(text)
+    return unsugar_operations(raw_ast)

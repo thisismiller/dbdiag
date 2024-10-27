@@ -116,3 +116,17 @@ def test_grouping():
         [parser.Operation('X', None, None, 'W(A)', 'WA'),
          parser.Operation('X', None, None, 'ok', 'WA')],
     ]
+
+def test_unsugar():
+    text = textwrap.dedent('''
+    T1.R(X)
+    T1.W(Y)
+    ''')
+    ops = parser.parse_operations(text)
+    ops = parser.unsugar_operations(ops)
+    assert ops == [
+        [parser.Operation('T1', None, None, 'R(X)', '__0')],
+        [parser.Operation('T1', None, None, None, '__0')],
+        [parser.Operation('T1', None, None, 'W(Y)', '__1')],
+        [parser.Operation('T1', None, None, None, '__1')],
+    ]
