@@ -5,6 +5,7 @@ import enum
 from typing import NamedTuple, Optional, TypeAlias
 from . import parser
 from .constants import *
+from .render import *
 
 # Used to assign spans to a row, and keep track of how many rows need to exist
 # so that no span ever overlaps with another.
@@ -86,65 +87,27 @@ def operations_to_spans(operations : list[parser.Operation]) -> SpanInfo:
 
 #### Data Model
 
-class Dimension(object):
-    def __init__(self, dist, unit):
-        self._dist = dist
-        self._unit = unit
-
-    def __str__(self):
-        if EMBED and self._unit == 'ch':
-            return f'{self._dist * CH_WIDTH_IN_PX}px'
-        else:
-            return f'{self._dist}{self._unit}'
-
-    def __add__(self, x : 'Dimension') -> 'Dimension':
-        assert self._unit == x._unit
-        return Dimension(self._dist + x._dist, self._unit)
-
-    def __ladd__(self, x : 'Dimension'):
-        assert self._unit == x._unit
-        self._dist += x._dist
-
-    def __sub__(self, x : 'Dimension') -> 'Dimension':
-        assert self._unit == x._unit
-        return Dimension(self._dist - x._dist, self._unit)
-
-    def __lsub__(self, x : 'Dimension'):
-        assert self._unit == x._unit
-        self._dist -= x._dist
-
-    @staticmethod
-    def from_ch(ch : UnitsCh) -> 'Dimension':
-        return Dimension(ch, 'ch')
-
-    @staticmethod
-    def from_px(px : UnitsPx) -> 'Dimension':
-        return Dimension(px, 'px')
-
-    @staticmethod
-    def from_percent(p : UnitsPercent) -> 'Dimension':
-        return Dimension(p, '%')
 
 class Actor(NamedTuple):
     name : str
-    x : int
-    y : int
-    width : int
-    height : int
+    x : Dimension
+    y : Dimension
+    width : Dimension
+    height : Dimension
+
+Drawable : TypeAlias = Span
 
 class Chart(NamedTuple):
     actors : list[Actor]
-    spans : list[Span]
+    spans : list[Drawable]
     width : Dimension
     height : Dimension
-    max_actor_width : UnitsCh
 
-def span_width(span : Span) -> int:
+def span_width(span : Span) -> Dimension:
     (left, right) = span.text
     chars = len(left or "") + len(right or "")
     both = left and right
-    ret = chars + (INNER_INNER_BUFFER if both else 0) + INNER_BUFFER * 2
-    return ret
+    return Dimension.from_ch(chars) + (INNER_INNER_BUFFER if both else 0) + INNER_BUFFER * 2
 
 def spans_to_chart(spaninfo : SpanInfo) -> Chart:
     actors = []
@@ -164,12 +127,12 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
         current_height += spaninfo.depths[actor]
 
     for span in spaninfo.spans:
-        span.x1 = span.start * OUTER_BUFFER
+        span.x1 = Dimension.from_ch(span.start) * OUTER_BUFFER
         span.x2 = span.x1 + span_width(span)
         if span.eventpoint:
-            span.event_x = span.eventpoint * OUTER_BUFFER
+            span.event_x = Dimension.from_ch(span.eventpoint) * OUTER_BUFFER
 
-        span.y = (base_heights[span.actor] + span.height) * PX_SPAN_VERTICAL
+        span.y = Dimension.from_px(base_heights[span.actor] + span.height) * PX_SPAN_VERTICAL
 
     made_change = True
     while made_change:
@@ -177,15 +140,15 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
         for span in spaninfo.spans:
             beforeevent = afterevent = None
             for other in spaninfo.spans:
-                if other.start < span.start and span.x1 < other.x1 + OUTER_BUFFER:
+                if other.start < span.start and span.x1 < (other.x1 + OUTER_BUFFER):
                     made_change = True
                     span.x1 = other.x1 + OUTER_BUFFER
                     span.x2 = max(span.x2, span.x1 + span_width(span))
-                if other.end < span.start and span.x1 < other.x2 + OUTER_BUFFER:
+                if other.end < span.start and span.x1 < (other.x2 + OUTER_BUFFER):
                     made_change = True
                     span.x1 = other.x2 + OUTER_BUFFER
                     span.x2 = max(span.x2, span.x1 + span_width(span))
-                if other.end < span.end and span.x2 < other.x2 + OUTER_BUFFER:
+                if other.end < span.end and span.x2 < (other.x2 + OUTER_BUFFER):
                     made_change = True
                     span.x2 = other.x2 + OUTER_BUFFER
                 if span.eventpoint:
@@ -221,7 +184,7 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
 
     chart_width = max(span.x2 for span in spaninfo.spans) + OUTER_BUFFER
     chart_height = current_height * PX_SPAN_VERTICAL + OFFSET_Y + PX_CHAR_HEIGHT
-    return Chart(actors, spaninfo.spans, Dimension.from_ch(chart_width), Dimension.from_px(chart_height), max_actor_width)
+    return Chart(actors, spaninfo.spans, chart_width, chart_height)
 
 #### Renderer
 
@@ -295,12 +258,12 @@ class SVG(object):
 
 def svg_actor(svg : SVG, actor : Actor) -> str:
     lines = []
-    text_x = Dimension.from_ch(actor.x + actor.width)
-    text_y = Dimension.from_px(actor.y + actor.height / 2)
+    text_x = actor.x + actor.width
+    text_y = actor.y + actor.height / 2
     svg.text(text_x, text_y, SVG.XAlign.END, SVG.YAlign.MIDDLE, actor.name, font="monospace")
-    line_x = Dimension.from_ch(actor.x + actor.width + CH_ACTOR_SPAN_SEPARATION / 2)
-    top_y = Dimension.from_px(actor.y + PX_ACTORBAR_SEPARATION)
-    bottom_y = Dimension.from_px(actor.y + actor.height - PX_ACTORBAR_SEPARATION)
+    line_x = actor.x + actor.width + CH_ACTOR_SPAN_SEPARATION / 2
+    top_y = actor.y + PX_ACTORBAR_SEPARATION
+    bottom_y = actor.y + actor.height - PX_ACTORBAR_SEPARATION
     svg.line(line_x, top_y, line_x, bottom_y)
     if DEBUG:
         svg.line(Dimension.from_percent(0), top_y, Dimension.from_percent(100), top_y)
@@ -308,21 +271,21 @@ def svg_actor(svg : SVG, actor : Actor) -> str:
     return '\n'.join(lines)
 
 def svg_span(svg : SVG, span : Span) -> str:
-    svg.line(Dimension.from_ch(span.x1), Dimension.from_px(span.y), Dimension.from_ch(span.x2), Dimension.from_px(span.y))
-    svg.line(Dimension.from_ch(span.x1), Dimension.from_px(span.y-BARHEIGHT), Dimension.from_ch(span.x1), Dimension.from_px(span.y+BARHEIGHT))
-    svg.line(Dimension.from_ch(span.x2), Dimension.from_px(span.y-BARHEIGHT), Dimension.from_ch(span.x2), Dimension.from_px(span.y+BARHEIGHT))
+    svg.line(span.x1, span.y, span.x2, span.y)
+    svg.line(span.x1, span.y-BARHEIGHT, span.x1, span.y+BARHEIGHT)
+    svg.line(span.x2, span.y-BARHEIGHT, span.x2, span.y+BARHEIGHT)
     if span.event_x:
-        svg.circle(Dimension.from_ch(span.event_x), span.y, PX_EVENT_RADIUS)
+        svg.circle(span.event_x, span.y, PX_EVENT_RADIUS)
 
     left_text, right_text = span.text
-    y = Dimension.from_px(span.y - PX_LINE_TEXT_SEPARATION)
+    y = span.y - PX_LINE_TEXT_SEPARATION
     if left_text and right_text:
-        left_x = Dimension.from_ch(span.x1 + INNER_BUFFER)
+        left_x = span.x1 + INNER_BUFFER
         svg.text(left_x, y, SVG.XAlign.START, SVG.YAlign.BOTTOM, left_text)
-        right_x = Dimension.from_ch(span.x2 - INNER_BUFFER)
+        right_x = span.x2 - INNER_BUFFER
         svg.text(right_x, y, SVG.XAlign.END, SVG.YAlign.BOTTOM, right_text)
     elif left_text or right_text:
-        x = Dimension.from_ch(span.x1 + (span.x2 - span.x1)/2.0)
+        x = span.x1 + (span.x2 - span.x1)/2.0
         text = left_text or right_text
         svg.text(x, y, SVG.XAlign.MIDDLE, SVG.YAlign.BOTTOM, text)
 
