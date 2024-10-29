@@ -37,11 +37,17 @@ jobs:
       - name: Run Tests
         run: poetry run pytest
 
+      - name: Generate release tag
+        id: tag
+        run: |
+          echo "::set-output name=release_tag::$(git rev-parse HEAD)"
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          tag_name: ${{ steps.tag.outputs.release_tag }}
           files: dist/*.whl
           draft: false
           prerelease: false
