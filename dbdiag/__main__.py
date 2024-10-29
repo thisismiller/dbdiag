@@ -1,13 +1,14 @@
 import sys
 import argparse
-from .constants import *
+from . import constants
 from . import spans
 
 def parse_args(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument('file', help='file of operations')
     parser.add_argument('-o', '--output', help='output file path')
-    parser.add_argument('--debug', action='store_true', help='add extra lines to debug alignment issues')
+    parser.add_argument('--debug', action='store_true', help='print out each intermediate step')
+    parser.add_argument('--guidelines', action='store_true', help='add extra lines to debug alignment issues')
     parser.add_argument('--embed', action='store_true', help='only use 12px font and px units')
     return parser.parse_args()
 
@@ -15,11 +16,11 @@ def main(argv):
     args = parse_args(argv)
 
     if args.debug:
-        global DEBUG
-        DEBUG = True
+        constants.DEBUG = True
+    if args.guidelines:
+        constants.GUIDELINES = True
     if args.embed:
-        global EMBED
-        EMBED = True
+        constants.EMBED = True
 
     with open(args.file) as f:
         text_input = f.read()

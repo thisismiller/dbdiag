@@ -4,7 +4,7 @@ import dataclasses
 import enum
 from typing import NamedTuple, Optional, TypeAlias
 from . import parser
-from .constants import *
+from . import constants
 from .render import *
 
 # Used to assign spans to a row, and keep track of how many rows need to exist
@@ -151,6 +151,12 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
                 if other.end < span.end and span.x2 < (other.x2 + OUTER_BUFFER):
                     made_change = True
                     span.x2 = other.x2 + OUTER_BUFFER
+                lkj = [['start', 'x1'], ['eventpoint', 'event_x'], ['end', 'x2']]
+                for idxattr, xattr in lkj:
+                    if span.start-1 == getattr(other, idxattr) and span.x1 > getattr(other, xattr) + OUTER_BUFFER:
+                        made_change = True
+                        span.x1 = getattr(other, xattr) + OUTER_BUFFER
+                        span.x2 = span.x1 + span_width(span)
                 if span.eventpoint:
                     if other.start == span.eventpoint-1:
                         beforeevent = other.x1
@@ -179,11 +185,14 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
         span.x1 += OFFSET_X
         span.x2 += OFFSET_X
         span.y += OFFSET_Y
+        span.y += [a.name for a in actors].index(span.actor) * PX_ACTORBAR_SEPARATION
         if span.event_x:
             span.event_x += OFFSET_X
+    for idx, actor in enumerate(actors):
+        actors[idx] = actor._replace(y=actor.y + idx * PX_ACTORBAR_SEPARATION)
 
     chart_width = max(span.x2 for span in spaninfo.spans) + OUTER_BUFFER
-    chart_height = current_height * PX_SPAN_VERTICAL + OFFSET_Y + PX_CHAR_HEIGHT
+    chart_height = current_height * PX_SPAN_VERTICAL + OFFSET_Y
     return Chart(actors, spaninfo.spans, chart_width, chart_height)
 
 #### Renderer
@@ -212,7 +221,7 @@ class SVG(object):
                         stroke: #eceff4;
                     }
                 }""")
-        if EMBED:
+        if constants.EMBED:
             header += textwrap.dedent("""
                 text {
                     font-size: 12px;
@@ -233,15 +242,16 @@ class SVG(object):
         self._svg = [self._svg_header(self._width, self._height)]
         self._rendered = None
     
-    def line(self, x1 : Dimension, y1 : Dimension, x2 : Dimension, y2 : Dimension):
+    def line(self, x1 : Dimension, y1 : Dimension, x2 : Dimension, y2 : Dimension, **kwargs):
+        extra = ' '.join([f'{k.replace('_', '-')}="{v}"'  for k,v in kwargs.items()])
         self._svg.append(
-            f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="black" />'
+            f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="black" {extra}/>'
         )
     
-    def text(self, x : Dimension, y : Dimension, xalign : XAlign, yalign : YAlign, text : str, font = None):
-        font_family = f' font-family="{font}"' if font else ''
+    def text(self, x : Dimension, y : Dimension, xalign : XAlign, yalign : YAlign, text : str, **kwargs):
+        extra = ' '.join([f'{k.replace('_', '-')}="{v}"'  for k,v in kwargs.items()])
         self._svg.append(
-            f'<text x="{x}" y="{y}" text-anchor="{xalign}" alignment-baseline="{yalign}"{font_family}>{text}</text>'
+            f'<text x="{x}" y="{y}" text-anchor="{xalign}" alignment-baseline="{yalign}" {extra}>{text}</text>'
         )
 
     def circle(self, x : Dimension, y : Dimension, r : Dimension):
@@ -260,14 +270,14 @@ def svg_actor(svg : SVG, actor : Actor) -> str:
     lines = []
     text_x = actor.x + actor.width
     text_y = actor.y + actor.height / 2
-    svg.text(text_x, text_y, SVG.XAlign.END, SVG.YAlign.MIDDLE, actor.name, font="monospace")
+    svg.text(text_x, text_y, SVG.XAlign.END, SVG.YAlign.MIDDLE, actor.name, font_family="monospace")
     line_x = actor.x + actor.width + CH_ACTOR_SPAN_SEPARATION / 2
     top_y = actor.y + PX_ACTORBAR_SEPARATION
     bottom_y = actor.y + actor.height - PX_ACTORBAR_SEPARATION
     svg.line(line_x, top_y, line_x, bottom_y)
-    if DEBUG:
-        svg.line(Dimension.from_percent(0), top_y, Dimension.from_percent(100), top_y)
-        svg.line(Dimension.from_percent(0), bottom_y, Dimension.from_percent(100), bottom_y)
+    if constants.GUIDELINES:
+        svg.line(Dimension.from_percent(0), top_y, Dimension.from_percent(100), top_y, stroke_dasharray="5")
+        svg.line(Dimension.from_percent(0), bottom_y, Dimension.from_percent(100), bottom_y, stroke_dasharray="5")
     return '\n'.join(lines)
 
 def svg_span(svg : SVG, span : Span) -> str:
@@ -306,11 +316,11 @@ def to_span_svg(text_input):
         return str(e)
     if not operations:
         return ""
-    if DEBUG: print(operations)
+    if constants.DEBUG: print(operations)
     spaninfo = operations_to_spans(operations)
-    if DEBUG: print(spaninfo)
+    if constants.DEBUG: print(spaninfo)
     chart = spans_to_chart(spaninfo)
-    if DEBUG: print(chart)
+    if constants.DEBUG: print(chart)
     svg = chart_to_svg(chart)
-    if DEBUG: print(svg)
+    if constants.DEBUG: print(svg)
     return svg
