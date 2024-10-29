@@ -1,0 +1,48 @@
+name: Build and Publish
+
+on:
+  push:
+    branches:
+      - release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Upgrade pip
+        run: |
+          pip install pip
+          pip --version
+
+      - name: Install Poetry
+        run: |
+          pip install poetry
+          poetry --version
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Build wheel
+        run: poetry build
+
+      - name: Run Tests
+        run: poetry run pytest
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: dist/*.whl
+          draft: false
+          prerelease: false
+
