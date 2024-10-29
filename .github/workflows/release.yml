@@ -39,8 +39,7 @@ jobs:
 
       - name: Generate release tag
         id: tag
-        run: |
-          echo "::set-output name=release_tag::$(git rev-parse HEAD | head -c 8)"
+        run: echo "release_tag=$(git rev-parse HEAD | head -c 8)" >> $GITHUB_OUTPUT
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
