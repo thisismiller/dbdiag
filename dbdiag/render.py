@@ -1,4 +1,4 @@
-from .constants import *
+from . import constants
 from typing import TypeAlias
 
 UnitsCh : TypeAlias = int
@@ -13,8 +13,8 @@ class Dimension(object):
         self._unit = unit
 
     def __str__(self):
-        if EMBED and self._unit == 'ch':
-            return f'{self._dist * CH_WIDTH_IN_PX}px'
+        if constants.EMBED and self._unit == 'ch':
+            return f'{self._dist * CH_WIDTH_IN_PX._dist}px'
         else:
             return f'{self._dist}{self._unit}'
 
@@ -155,6 +155,7 @@ class Dimension(object):
     def from_percent(p : UnitsPercent) -> 'Dimension':
         assert not isinstance(p, Dimension)
         return Dimension(p, '%')
+
 
 # OUTER_BUFFER | INNER_BUFFER <text> INNER_INNER_BUFFER <text> INNER_BUFFER |
 INNER_BUFFER : Dimension = Dimension.from_ch(1)
