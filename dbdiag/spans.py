@@ -309,7 +309,9 @@ def chart_to_svg(chart : Chart) -> str:
 
 #### Driver
 
-def to_span_svg(text_input):
+def to_span_svg(text_input, embed=None):
+    if embed is True or embed is False:
+        constants.EMBED = embed
     try:
         operations = parser.parse(text_input)
     except RuntimeError as e:
