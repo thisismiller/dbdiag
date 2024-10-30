@@ -17,6 +17,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.12'
+          cache: 'poetry'
 
       - name: Upgrade pip
         run: |
@@ -50,4 +51,13 @@ jobs:
           files: dist/*.whl
           draft: false
           prerelease: false
+
+      - name: Remove other releases
+        uses: sgpublic/delete-release-action@v1.1
+        with:
+          release-drop: true
+          release-keep-count: 2
+          release-drop-tag: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
