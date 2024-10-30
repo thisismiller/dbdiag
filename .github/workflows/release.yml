@@ -13,12 +13,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.12'
-          cache: 'poetry'
-
       - name: Upgrade pip
         run: |
           pip install pip
@@ -28,6 +22,12 @@ jobs:
         run: |
           pip install poetry
           poetry --version
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'poetry'
 
       - name: Install dependencies
         run: poetry install --no-interaction
