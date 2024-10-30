@@ -100,8 +100,6 @@ Drawable : TypeAlias = Span
 class Chart(NamedTuple):
     actors : list[Actor]
     spans : list[Drawable]
-    width : Dimension
-    height : Dimension
 
 def span_width(span : Span) -> Dimension:
     (left, right) = span.text
@@ -191,23 +189,100 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
     for idx, actor in enumerate(actors):
         actors[idx] = actor._replace(y=actor.y + idx * PX_ACTORBAR_SEPARATION)
 
-    chart_width = max(span.x2 for span in spaninfo.spans) + OUTER_BUFFER
-    chart_height = current_height * PX_SPAN_VERTICAL + OFFSET_Y
-    return Chart(actors, spaninfo.spans, chart_width, chart_height)
+    return Chart(actors, spaninfo.spans)
 
 #### Renderer
 
+@dataclasses.dataclass
+class Line(object):
+    x1 : Dimension
+    y1 : Dimension
+    x2 : Dimension
+    y2 : Dimension
+    attrs : Optional[dict[str, str]]
+
+    def x_min(self): return min(self.x1, self.x2)
+    def x_max(self): return max(self.x1, self.x2)
+    def y_min(self): return min(self.y1, self.y2)
+    def y_max(self): return max(self.y1, self.y2)
+    def render(self):
+        extra = ' '.join([f'{k.replace('_', '-')}="{v}"'  for k,v in self.attrs.items()])
+        return f'<line x1="{self.x1}" y1="{self.y1}" x2="{self.x2}" y2="{self.y2}" {extra}/>'
+
+class XAlign(enum.StrEnum):
+    START = "start"
+    MIDDLE = "middle"
+    END = "end"
+
+class YAlign(enum.StrEnum):
+    TOP = "text-top"
+    MIDDLE = "middle"
+    BOTTOM = "baseline"
+
+@dataclasses.dataclass
+class Text(object):
+    x : Dimension
+    y : Dimension
+    xalign : XAlign
+    yalign : YAlign
+    text : str
+    attrs : Optional[dict[str, str]]
+
+    def x_min(self):
+        match self.xalign:
+            case XAlign.START:
+                return self.x
+            case XAlign.MIDDLE:
+                return self.x - Dimension.from_ch(len(self.text)) / 2
+            case XAlign.END:
+                return self.x - Dimension.from_ch(len(self.text))
+    def x_max(self):
+        match self.xalign:
+            case XAlign.START:
+                return self.x + Dimension.from_ch(len(self.text))
+            case XAlign.MIDDLE:
+                return self.x + Dimension.from_ch(len(self.text)) / 2
+            case XAlign.END:
+                return self.x
+    def y_min(self):
+        match self.yalign:
+            case YAlign.TOP:
+                return self.y
+            case YAlign.MIDDLE:
+                return self.y - CH_HEIGHT_IN_PX/2
+            case YAlign.BOTTOM:
+                return self.y - CH_HEIGHT_IN_PX
+    def y_max(self):
+        match self.yalign:
+            case YAlign.TOP:
+                return self.y + CH_HEIGHT_IN_PX
+            case YAlign.MIDDLE:
+                return self.y + CH_HEIGHT_IN_PX/2
+            case YAlign.BOTTOM:
+                return self.y
+    def render(self):
+        extra = ' '.join([f'{k.replace('_', '-')}="{v}"'  for k,v in self.attrs.items()])
+        return f'<text x="{self.x}" y="{self.y}" text-anchor="{self.xalign}" alignment-baseline="{self.yalign}" {extra}>{self.text}</text>'
+
+@dataclasses.dataclass
+class Circle(object):
+    x : Dimension
+    y : Dimension
+    r : Dimension
+    attrs : Optional[dict[str, str]]
+
+    # min/max for circles is hard because x can be in ch and y is in px
+    # But our use of circles should never determine the boundaries, so
+    # being wrong should be fine?
+    def x_min(self): return self.x 
+    def x_max(self): return self.x 
+    def y_min(self): return self.y
+    def y_max(self): return self.y
+    def render(self):
+        extra = ' '.join([f'{k.replace('_', '-')}="{v}"'  for k,v in self.attrs.items()])
+        return f'<circle cx="{self.x}" cy="{self.y}" r="{self.r}" {extra}/>'
+
 class SVG(object):
-    class XAlign(enum.StrEnum):
-        START = "start"
-        MIDDLE = "middle"
-        END = "end"
-
-    class YAlign(enum.StrEnum):
-        TOP = "text-top"
-        MIDDLE = "middle"
-        BOTTOM = "baseline"
-
     def _svg_header(self, width : Dimension, height : Dimension) -> str:
         header = f'''<svg version="1.1" width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">'''
         header += textwrap.dedent("""
@@ -235,42 +310,48 @@ class SVG(object):
     def _svg_footer(self) -> str:
         return '</svg>'
 
-    def __init__(self, width : Dimension, height : Dimension):
+    def __init__(self):
         super()
-        self._width = width
-        self._height = height
-        self._svg = [self._svg_header(self._width, self._height)]
         self._rendered = None
+        self._contents = []
+    
+    def x_min(self): return min([obj.x_min() for obj in self._contents])
+    def x_max(self): return max([obj.x_max() for obj in self._contents])
+    def y_min(self): return min([obj.y_min() for obj in self._contents])
+    def y_max(self): return max([obj.y_max() for obj in self._contents])
     
     def line(self, x1 : Dimension, y1 : Dimension, x2 : Dimension, y2 : Dimension, **kwargs):
-        extra = ' '.join([f'{k.replace('_', '-')}="{v}"'  for k,v in kwargs.items()])
-        self._svg.append(
-            f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="black" {extra}/>'
-        )
+        kwargs.setdefault('stroke', 'black')
+        obj = Line(x1, y1, x2, y2, kwargs)
+        self._contents.append(obj)
     
     def text(self, x : Dimension, y : Dimension, xalign : XAlign, yalign : YAlign, text : str, **kwargs):
-        extra = ' '.join([f'{k.replace('_', '-')}="{v}"'  for k,v in kwargs.items()])
-        self._svg.append(
-            f'<text x="{x}" y="{y}" text-anchor="{xalign}" alignment-baseline="{yalign}" {extra}>{text}</text>'
-        )
+        obj = Text(x, y, xalign, yalign, text, kwargs)
+        self._contents.append(obj)
 
-    def circle(self, x : Dimension, y : Dimension, r : Dimension):
-        self._svg.append(
-            f'<circle cx="{x}" cy="{y}" r="{r}" />'
-        )
+    def circle(self, x : Dimension, y : Dimension, r : Dimension, **kwargs):
+        obj = Circle(x, y, r, kwargs)
+        self._contents.append(obj)
+
+    def svg(self, x : Dimension, y : Dimension, svg : 'SVG'):
+        for obj in svg._contents:
+            obj.offset(x, y)
+        self._contents.append(svg)
 
     def render(self):
         if self._rendered:
             return self._rendered
-        self._svg.append(self._svg_footer())
-        self._rendered = '\n'.join(self._svg)
+        lines = [self._svg_header(self.x_max(), self.y_max())]
+        for obj in self._contents:
+            lines.append(obj.render())
+        lines.append(self._svg_footer())
+        self._rendered = '\n'.join(lines)
         return self._rendered
 
 def svg_actor(svg : SVG, actor : Actor) -> str:
-    lines = []
     text_x = actor.x + actor.width
     text_y = actor.y + actor.height / 2
-    svg.text(text_x, text_y, SVG.XAlign.END, SVG.YAlign.MIDDLE, actor.name, font_family="monospace")
+    svg.text(text_x, text_y, XAlign.END, YAlign.MIDDLE, actor.name, font_family="monospace")
     line_x = actor.x + actor.width + CH_ACTOR_SPAN_SEPARATION / 2
     top_y = actor.y + PX_ACTORBAR_SEPARATION
     bottom_y = actor.y + actor.height - PX_ACTORBAR_SEPARATION
@@ -278,7 +359,6 @@ def svg_actor(svg : SVG, actor : Actor) -> str:
     if constants.GUIDELINES:
         svg.line(Dimension.from_percent(0), top_y, Dimension.from_percent(100), top_y, stroke_dasharray="5")
         svg.line(Dimension.from_percent(0), bottom_y, Dimension.from_percent(100), bottom_y, stroke_dasharray="5")
-    return '\n'.join(lines)
 
 def svg_span(svg : SVG, span : Span) -> str:
     svg.line(span.x1, span.y, span.x2, span.y)
@@ -291,16 +371,16 @@ def svg_span(svg : SVG, span : Span) -> str:
     y = span.y - PX_LINE_TEXT_SEPARATION
     if left_text and right_text:
         left_x = span.x1 + INNER_BUFFER
-        svg.text(left_x, y, SVG.XAlign.START, SVG.YAlign.BOTTOM, left_text)
+        svg.text(left_x, y, XAlign.START, YAlign.BOTTOM, left_text)
         right_x = span.x2 - INNER_BUFFER
-        svg.text(right_x, y, SVG.XAlign.END, SVG.YAlign.BOTTOM, right_text)
+        svg.text(right_x, y, XAlign.END, YAlign.BOTTOM, right_text)
     elif left_text or right_text:
         x = span.x1 + (span.x2 - span.x1)/2.0
         text = left_text or right_text
-        svg.text(x, y, SVG.XAlign.MIDDLE, SVG.YAlign.BOTTOM, text)
+        svg.text(x, y, XAlign.MIDDLE, YAlign.BOTTOM, text)
 
 def chart_to_svg(chart : Chart) -> str:
-    svg = SVG(chart.width, chart.height)
+    svg = SVG()
     for actor in chart.actors:
         svg_actor(svg, actor)
     for span in chart.spans:
