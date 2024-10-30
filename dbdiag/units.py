@@ -1,12 +1,6 @@
 from . import constants
 from typing import TypeAlias
 
-UnitsCh : TypeAlias = int
-UnitsEm : TypeAlias = int
-UnitsPx : TypeAlias = int
-UnitsPercent : TypeAlias = int
-
-
 class Dimension(object):
     def __init__(self, dist, unit):
         self._dist = dist
@@ -142,31 +136,55 @@ class Dimension(object):
         assert False
 
     @staticmethod
-    def from_ch(ch : UnitsCh) -> 'Dimension':
+    def from_ch(ch : 'Ch') -> 'Dimension':
         assert not isinstance(ch, Dimension)
         return Dimension(ch, 'ch')
 
     @staticmethod
-    def from_px(px : UnitsPx) -> 'Dimension':
+    def from_px(px : 'Px') -> 'Dimension':
         assert not isinstance(px, Dimension)
         return Dimension(px, 'px')
 
     @staticmethod
-    def from_percent(p : UnitsPercent) -> 'Dimension':
+    def from_percent(p : 'Percent') -> 'Dimension':
         assert not isinstance(p, Dimension)
         return Dimension(p, '%')
 
+    @staticmethod
+    def from_slot(s : 'Slot') -> 'Dimension':
+        assert not isinstance(s, Dimension)
+        return Dimension(s, 'slot')
+
+class Ch(Dimension):
+    unit = 'ch'
+    def __init__(self, dist):
+        super().__init__(dist, 'ch')
+
+class Px(Dimension):
+    unit = 'px'
+    def __init__(self, dist):
+        super().__init__(dist, 'px')
+
+class Percent(Dimension):
+    unit = '%'
+    def __init__(self, dist):
+        super().__init__(dist, '%')
+
+class Slot(Dimension):
+    unit = 'slot'
+    def __init__(self, dist):
+        super().__init__(dist, 'slot')
 
 # OUTER_BUFFER | INNER_BUFFER <text> INNER_INNER_BUFFER <text> INNER_BUFFER |
-INNER_BUFFER : Dimension = Dimension.from_ch(1)
-INNER_INNER_BUFFER : Dimension = Dimension.from_ch(3)
-OUTER_BUFFER : Dimension = Dimension.from_ch(4)
-PX_CHAR_HEIGHT : Dimension = Dimension.from_px(15)
-PX_SPAN_VERTICAL : Dimension = Dimension.from_px(30)
-PX_LINE_TEXT_SEPARATION : Dimension = Dimension.from_px(6)
-BARHEIGHT : Dimension = Dimension.from_px(8)
-CH_ACTOR_SPAN_SEPARATION : Dimension = Dimension.from_ch(4)
-PX_ACTORBAR_SEPARATION : Dimension = Dimension.from_px(3)
-PX_EVENT_RADIUS : Dimension = Dimension.from_px(3)
-CH_WIDTH_IN_PX : Dimension = Dimension.from_px(7)
-CH_HEIGHT_IN_PX : Dimension = Dimension.from_px(12)
+INNER_BUFFER : Dimension = Ch(1)
+INNER_INNER_BUFFER : Dimension = Ch(3)
+OUTER_BUFFER : Dimension = Ch(4)
+PX_CHAR_HEIGHT : Dimension = Px(15)
+PX_SPAN_VERTICAL : Dimension = Px(30)
+PX_LINE_TEXT_SEPARATION : Dimension = Px(6)
+BARHEIGHT : Dimension = Px(8)
+CH_ACTOR_SPAN_SEPARATION : Dimension = Ch(4)
+PX_ACTORBAR_SEPARATION : Dimension = Px(3)
+PX_EVENT_RADIUS : Dimension = Px(3)
+CH_WIDTH_IN_PX : Dimension = Px(7)
+CH_HEIGHT_IN_PX : Dimension = Px(12)

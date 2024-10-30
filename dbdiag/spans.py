@@ -1,3 +1,4 @@
+import abc
 import bisect
 import textwrap
 import dataclasses
@@ -5,7 +6,8 @@ import enum
 from typing import NamedTuple, Optional, TypeAlias
 from . import parser
 from . import constants
-from .render import *
+from . import units
+from .units import *
 
 # Used to assign spans to a row, and keep track of how many rows need to exist
 # so that no span ever overlaps with another.
@@ -39,10 +41,10 @@ class Span(object):
     height : int
     text : tuple[Optional[str], Optional[str]]
     eventpoint : Optional[int]
-    x1 : Optional[UnitsCh] = None
-    x2 : Optional[UnitsCh] = None
-    event_x : Optional[UnitsCh] = None
-    y : Optional[UnitsPx] = None
+    x1 : Optional[units.Ch] = None
+    x2 : Optional[units.Ch] = None
+    event_x : Optional[units.Ch] = None
+    y : Optional[units.Px] = None
 
 @dataclasses.dataclass
 class SpanStart(object):
@@ -105,7 +107,7 @@ def span_width(span : Span) -> Dimension:
     (left, right) = span.text
     chars = len(left or "") + len(right or "")
     both = left and right
-    return Dimension.from_ch(chars) + (INNER_INNER_BUFFER if both else 0) + INNER_BUFFER * 2
+    return units.Ch(chars) + (INNER_INNER_BUFFER if both else 0) + INNER_BUFFER * 2
 
 def spans_to_chart(spaninfo : SpanInfo) -> Chart:
     actors = []
@@ -125,10 +127,10 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
         current_height += spaninfo.depths[actor]
 
     for span in spaninfo.spans:
-        span.x1 = Dimension.from_ch(span.start) * OUTER_BUFFER
+        span.x1 = units.Ch(span.start) * OUTER_BUFFER
         span.x2 = span.x1 + span_width(span)
         if span.eventpoint:
-            span.event_x = Dimension.from_ch(span.eventpoint) * OUTER_BUFFER
+            span.event_x = units.Ch(span.eventpoint) * OUTER_BUFFER
 
         span.y = Dimension.from_px(base_heights[span.actor] + span.height) * PX_SPAN_VERTICAL
 
@@ -193,8 +195,22 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
 
 #### Renderer
 
+class Drawable(abc.ABC):
+    @abc.abstractmethod
+    def x_min(self): pass
+    @abc.abstractmethod
+    def x_max(self): pass
+    @abc.abstractmethod
+    def y_min(self): pass
+    @abc.abstractmethod
+    def y_max(self): pass
+    @abc.abstractmethod
+    def render(self): pass
+    @abc.abstractmethod
+    def translate(self, x, y): pass
+
 @dataclasses.dataclass
-class Line(object):
+class Line(Drawable):
     x1 : Dimension
     y1 : Dimension
     x2 : Dimension
@@ -208,6 +224,11 @@ class Line(object):
     def render(self):
         extra = ' '.join([f'{k.replace('_', '-')}="{v}"'  for k,v in self.attrs.items()])
         return f'<line x1="{self.x1}" y1="{self.y1}" x2="{self.x2}" y2="{self.y2}" {extra}/>'
+    def translate(self, x : Dimension, y : Dimension):
+        self.x1 += x
+        self.x2 += x
+        self.y1 += y
+        self.y2 += y
 
 class XAlign(enum.StrEnum):
     START = "start"
@@ -220,7 +241,7 @@ class YAlign(enum.StrEnum):
     BOTTOM = "baseline"
 
 @dataclasses.dataclass
-class Text(object):
+class Text(Drawable):
     x : Dimension
     y : Dimension
     xalign : XAlign
@@ -233,15 +254,15 @@ class Text(object):
             case XAlign.START:
                 return self.x
             case XAlign.MIDDLE:
-                return self.x - Dimension.from_ch(len(self.text)) / 2
+                return self.x - units.Ch(len(self.text)) / 2
             case XAlign.END:
-                return self.x - Dimension.from_ch(len(self.text))
+                return self.x - units.Ch(len(self.text))
     def x_max(self):
         match self.xalign:
             case XAlign.START:
-                return self.x + Dimension.from_ch(len(self.text))
+                return self.x + units.Ch(len(self.text))
             case XAlign.MIDDLE:
-                return self.x + Dimension.from_ch(len(self.text)) / 2
+                return self.x + units.Ch(len(self.text)) / 2
             case XAlign.END:
                 return self.x
     def y_min(self):
@@ -263,9 +284,12 @@ class Text(object):
     def render(self):
         extra = ' '.join([f'{k.replace('_', '-')}="{v}"'  for k,v in self.attrs.items()])
         return f'<text x="{self.x}" y="{self.y}" text-anchor="{self.xalign}" alignment-baseline="{self.yalign}" {extra}>{self.text}</text>'
+    def translate(self, x : Dimension, y : Dimension):
+        self.x += x
+        self.y += y
 
 @dataclasses.dataclass
-class Circle(object):
+class Circle(Drawable):
     x : Dimension
     y : Dimension
     r : Dimension
@@ -281,6 +305,9 @@ class Circle(object):
     def render(self):
         extra = ' '.join([f'{k.replace('_', '-')}="{v}"'  for k,v in self.attrs.items()])
         return f'<circle cx="{self.x}" cy="{self.y}" r="{self.r}" {extra}/>'
+    def translate(self, x : Dimension, y : Dimension):
+        self.x += x
+        self.y += y
 
 class SVG(object):
     def _svg_header(self, width : Dimension, height : Dimension) -> str:
@@ -335,7 +362,7 @@ class SVG(object):
 
     def svg(self, x : Dimension, y : Dimension, svg : 'SVG'):
         for obj in svg._contents:
-            obj.offset(x, y)
+            obj.translate(x, y)
         self._contents.append(svg)
 
     def render(self):
