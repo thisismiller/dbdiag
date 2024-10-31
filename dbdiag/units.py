@@ -6,6 +6,11 @@ class Dimension(object):
         self._dist = dist
         self._unit = unit
 
+    def convert(self, other):
+        assert isinstance(other, Dimension)
+        self._unit = other.unit
+        self._dist *= other._dist
+
     def __str__(self):
         if constants.EMBED and self._unit == 'ch':
             return f'{self._dist * CH_WIDTH_IN_PX._dist}px'
@@ -14,6 +19,12 @@ class Dimension(object):
 
     def __repr__(self):
         return f'Dimension({self._dist}, {self._unit})'
+
+    def __int__(self):
+        return int(self._dist)
+    
+    def __float__(self):
+        return float(self._dist)
 
     def __add__(self, x : 'Dimension') -> 'Dimension':
         match x:
@@ -28,15 +39,7 @@ class Dimension(object):
         return self + x
 
     def __iadd__(self, x : 'Dimension'):
-        match x:
-            case int():
-                self._dist += x
-                return self
-            case Dimension():
-                assert self._unit == x._unit
-                self._dist += x._dist
-                return self
-        assert False
+        return self + x
 
     def __sub__(self, x : 'Dimension') -> 'Dimension':
         match x:
@@ -57,15 +60,7 @@ class Dimension(object):
         assert False
 
     def __isub__(self, x : 'Dimension'):
-        match x:
-            case int():
-                self._dist -= x
-                return self
-            case Dimension():
-                assert self._unit == x._unit
-                self._dist -= x._dist
-                return self
-        assert False
+        return self - x
 
     def __mul__(self, x : 'Dimension') -> 'Dimension':
         match x:
@@ -104,6 +99,8 @@ class Dimension(object):
             case int():
                 return self._dist < x
             case Dimension():
+                if self._unit != x._unit and (self._unit == '%' or x._unit == '%'):
+                    return self._unit == '%'
                 assert self._unit == x._unit
                 return self._dist < x._dist
         assert False
@@ -113,6 +110,8 @@ class Dimension(object):
             case int():
                 return self._dist > x
             case Dimension():
+                if self._unit != x._unit and (self._unit == '%' or x._unit == '%'):
+                    return x._unit == '%'
                 assert self._unit == x._unit
                 return self._dist > x._dist
         assert False
@@ -134,6 +133,9 @@ class Dimension(object):
                 assert self._unit == x._unit
                 return self._dist != x._dist
         assert False
+
+    def __hash__(self):
+        return hash((self._dist, self._unit))
 
     @staticmethod
     def from_ch(ch : 'Ch') -> 'Dimension':

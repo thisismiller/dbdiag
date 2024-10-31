@@ -44,6 +44,7 @@ class Span(object):
     x1 : Optional[units.Ch] = None
     x2 : Optional[units.Ch] = None
     event_x : Optional[units.Ch] = None
+    slot : Optional[units.Slot] = None
     y : Optional[units.Px] = None
 
 @dataclasses.dataclass
@@ -90,20 +91,21 @@ def operations_to_spans(operations : list[parser.Operation]) -> SpanInfo:
 #### Data Model
 
 
-class Actor(NamedTuple):
+@dataclasses.dataclass
+class Actor(object):
     name : str
-    x : Dimension
-    y : Dimension
-    width : Dimension
-    height : Dimension
+    slots : units.Slot
+    x : units.Ch = None
+    y : units.Px = None
+    height : units.Px = None
 
-Drawable : TypeAlias = Span
-
-class Chart(NamedTuple):
+@dataclasses.dataclass
+class Chart(object):
     actors : list[Actor]
-    spans : list[Drawable]
+    spans : list[Span]
+    cross : list[Span]
 
-def span_width(span : Span) -> Dimension:
+def span_width(span : Span) -> units.Ch:
     (left, right) = span.text
     chars = len(left or "") + len(right or "")
     both = left and right
@@ -117,11 +119,11 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
     base_heights = {}
     current_height = 0
     for actor in spaninfo.actors:
-        actor_x = OUTER_BUFFER # + max_actor_width/2
-        actor_y = PX_SPAN_VERTICAL + current_height * PX_SPAN_VERTICAL - PX_LINE_TEXT_SEPARATION - PX_CHAR_HEIGHT
-        actor_width = max_actor_width
-        actor_height = (spaninfo.depths[actor]) * PX_SPAN_VERTICAL
-        actors.append(Actor(actor, actor_x, actor_y, actor_width, actor_height))
+        actor_x = units.Ch(0)
+        actor_y = units.Slot(current_height)
+        actor_width = units.Ch(len(actor))
+        actor_height = units.Slot(spaninfo.depths[actor])
+        actors.append(Actor(actor, actor_height))
 
         base_heights[actor] = current_height
         current_height += spaninfo.depths[actor]
@@ -131,8 +133,7 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
         span.x2 = span.x1 + span_width(span)
         if span.eventpoint:
             span.event_x = units.Ch(span.eventpoint) * OUTER_BUFFER
-
-        span.y = Dimension.from_px(base_heights[span.actor] + span.height) * PX_SPAN_VERTICAL
+        span.slot = units.Slot(base_heights[span.actor] + span.height)
 
     made_change = True
     while made_change:
@@ -177,21 +178,7 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
                     made_change = True
                     span.event_x = (beforeevent + afterevent)/2
 
-    OFFSET_X = OUTER_BUFFER + max_actor_width + CH_ACTOR_SPAN_SEPARATION
-    OFFSET_Y = PX_SPAN_VERTICAL
-
-    for span in spaninfo.spans:
-        # adjust to make room for actor panel
-        span.x1 += OFFSET_X
-        span.x2 += OFFSET_X
-        span.y += OFFSET_Y
-        span.y += [a.name for a in actors].index(span.actor) * PX_ACTORBAR_SEPARATION
-        if span.event_x:
-            span.event_x += OFFSET_X
-    for idx, actor in enumerate(actors):
-        actors[idx] = actor._replace(y=actor.y + idx * PX_ACTORBAR_SEPARATION)
-
-    return Chart(actors, spaninfo.spans)
+    return Chart(actors, spaninfo.spans, [])
 
 #### Renderer
 
@@ -310,6 +297,45 @@ class Circle(Drawable):
         self.y += y
 
 class SVG(object):
+    def __init__(self):
+        super()
+        self._rendered = None
+        self._contents = []
+    
+    def x_min(self): return min([obj.x_min() for obj in self._contents])
+    def x_max(self): return max([obj.x_max() for obj in self._contents])
+    def y_min(self): return min([obj.y_min() for obj in self._contents])
+    def y_max(self): return max([obj.y_max() for obj in self._contents])
+    
+    def line(self, x1 : Dimension, y1 : Dimension, x2 : Dimension, y2 : Dimension, **kwargs):
+        kwargs.setdefault('stroke', 'black')
+        obj = Line(x1, y1, x2, y2, kwargs)
+        self._contents.append(obj)
+    
+    def text(self, x : Dimension, y : Dimension, xalign : XAlign, yalign : YAlign, text : str, **kwargs):
+        obj = Text(x, y, xalign, yalign, text, kwargs)
+        self._contents.append(obj)
+
+    def circle(self, x : Dimension, y : Dimension, r : Dimension, **kwargs):
+        obj = Circle(x, y, r, kwargs)
+        self._contents.append(obj)
+
+    def svg(self, x : Dimension, y : Dimension, svg : 'SVG'):
+        svg.translate(x, y)
+        self._contents.append(svg)
+
+    def translate(self, x : Dimension, y : Dimension):
+        for obj in self._contents:
+            obj.translate(x, y)
+
+    def render(self):
+        if self._rendered:
+            return self._rendered
+        lines = [obj.render() for obj in self._contents]
+        self._rendered = '\n'.join(lines)
+        return self._rendered
+
+class RootSVG(SVG):
     def _svg_header(self, width : Dimension, height : Dimension) -> str:
         header = f'''<svg version="1.1" width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">'''
         header += textwrap.dedent("""
@@ -337,57 +363,24 @@ class SVG(object):
     def _svg_footer(self) -> str:
         return '</svg>'
 
-    def __init__(self):
-        super()
-        self._rendered = None
-        self._contents = []
-    
-    def x_min(self): return min([obj.x_min() for obj in self._contents])
-    def x_max(self): return max([obj.x_max() for obj in self._contents])
-    def y_min(self): return min([obj.y_min() for obj in self._contents])
-    def y_max(self): return max([obj.y_max() for obj in self._contents])
-    
-    def line(self, x1 : Dimension, y1 : Dimension, x2 : Dimension, y2 : Dimension, **kwargs):
-        kwargs.setdefault('stroke', 'black')
-        obj = Line(x1, y1, x2, y2, kwargs)
-        self._contents.append(obj)
-    
-    def text(self, x : Dimension, y : Dimension, xalign : XAlign, yalign : YAlign, text : str, **kwargs):
-        obj = Text(x, y, xalign, yalign, text, kwargs)
-        self._contents.append(obj)
-
-    def circle(self, x : Dimension, y : Dimension, r : Dimension, **kwargs):
-        obj = Circle(x, y, r, kwargs)
-        self._contents.append(obj)
-
-    def svg(self, x : Dimension, y : Dimension, svg : 'SVG'):
-        for obj in svg._contents:
-            obj.translate(x, y)
-        self._contents.append(svg)
-
     def render(self):
-        if self._rendered:
-            return self._rendered
+        body = super().render()
         lines = [self._svg_header(self.x_max(), self.y_max())]
-        for obj in self._contents:
-            lines.append(obj.render())
+        lines.append(body)
         lines.append(self._svg_footer())
-        self._rendered = '\n'.join(lines)
-        return self._rendered
+        return '\n'.join(lines)
 
-def svg_actor(svg : SVG, actor : Actor) -> str:
-    text_x = actor.x + actor.width
-    text_y = actor.y + actor.height / 2
-    svg.text(text_x, text_y, XAlign.END, YAlign.MIDDLE, actor.name, font_family="monospace")
-    line_x = actor.x + actor.width + CH_ACTOR_SPAN_SEPARATION / 2
-    top_y = actor.y + PX_ACTORBAR_SEPARATION
-    bottom_y = actor.y + actor.height - PX_ACTORBAR_SEPARATION
+def actor_to_svg(actor : Actor) -> str:
+    svg = SVG()
+    svg.text(actor.x, actor.y, XAlign.END, YAlign.MIDDLE, actor.name, font_family="monospace")
+    line_x = actor.x + OUTER_BUFFER
+    top_y = actor.y + actor.height/2
+    bottom_y = actor.y - actor.height/2
     svg.line(line_x, top_y, line_x, bottom_y)
-    if constants.GUIDELINES:
-        svg.line(Dimension.from_percent(0), top_y, Dimension.from_percent(100), top_y, stroke_dasharray="5")
-        svg.line(Dimension.from_percent(0), bottom_y, Dimension.from_percent(100), bottom_y, stroke_dasharray="5")
+    return svg
 
-def svg_span(svg : SVG, span : Span) -> str:
+def span_to_svg(span : Span) -> str:
+    svg = SVG()
     svg.line(span.x1, span.y, span.x2, span.y)
     svg.line(span.x1, span.y-BARHEIGHT, span.x1, span.y+BARHEIGHT)
     svg.line(span.x2, span.y-BARHEIGHT, span.x2, span.y+BARHEIGHT)
@@ -405,13 +398,52 @@ def svg_span(svg : SVG, span : Span) -> str:
         x = span.x1 + (span.x2 - span.x1)/2.0
         text = left_text or right_text
         svg.text(x, y, XAlign.MIDDLE, YAlign.BOTTOM, text)
+    return svg
+
+def actors_to_slots_px(actors : list[Actor]) -> dict[units.Slot, units.Px]:
+    slot = units.Slot(0)
+    y = PX_SPAN_VERTICAL
+    px_of_slot = {}
+    actor_of_slot = {}
+    for actor in actors:
+        for _ in range(int(actor.slots)):
+            actor_of_slot[slot] = actor
+            px_of_slot[slot] = y
+            y += PX_SPAN_VERTICAL
+            slot += 1
+        y += PX_ACTORBAR_SEPARATION * 2
+    return px_of_slot, actor_of_slot
 
 def chart_to_svg(chart : Chart) -> str:
-    svg = SVG()
-    for actor in chart.actors:
-        svg_actor(svg, actor)
+    svg = RootSVG()
+
+    px_of_slot, actor_of_slot = actors_to_slots_px(chart.actors)
+    spans_of_actor = {}
     for span in chart.spans:
-        svg_span(svg, span)
+        span.y = px_of_slot[span.slot]
+        spans_of_actor.setdefault(actor_of_slot[span.slot].name, []).append(span)
+
+    actor_subregions = {}
+    for span in chart.spans:
+        span_svg = span_to_svg(span)
+        subregion = actor_subregions.setdefault(actor_of_slot[span.slot].name, SVG())
+        subregion.svg(units.Ch(0), units.Px(0), span_svg)
+
+    max_actor_width = max([units.Ch(len(actor.name)) for actor in chart.actors])
+    for actor in chart.actors:
+        subregion = actor_subregions[actor.name]
+        actor.x = max_actor_width
+        actor.height = subregion.y_max() - subregion.y_min()
+        actor.y = subregion.y_min() + actor.height/2
+        actor_svg = actor_to_svg(actor)
+        svg.svg(0, 0, actor_svg)
+        if constants.GUIDELINES:
+            svg.line(units.Percent(0), actor.y-actor.height/2, units.Percent(100), actor.y-actor.height/2, stroke_dasharray="5")
+            svg.line(units.Percent(0), actor.y+actor.height/2, units.Percent(100), actor.y+actor.height/2, stroke_dasharray="5")
+
+    spans_x_offset = max_actor_width + OUTER_BUFFER * 2
+    for spansvg in actor_subregions.values():
+        svg.svg(spans_x_offset, 0, spansvg)
     return svg.render()
 
 #### Driver
