@@ -54,12 +54,21 @@ class SpanStart(object):
     height : int
     eventpoint : Optional[int] = None
 
-class SpanInfo(NamedTuple):
-    spans : list[Span]
-    actors : list[str]
-    depths : dict[str, TokenBucket]
+@dataclasses.dataclass
+class Actor(object):
+    name : str
+    slots : units.Slot
+    x : units.Ch = None
+    y : units.Px = None
+    height : units.Px = None
 
-def operations_to_spans(operations : list[parser.Operation]) -> SpanInfo:
+@dataclasses.dataclass
+class Chart(object):
+    actors : list[Actor]
+    spans : list[Span]
+    cross : list[Span]
+
+def operations_to_spans(operations : list[parser.Operation]) -> Chart:
     inflight : dict[str, SpanStart] = {}
     actors_names : list[str] = []
     actor_depth : dict[str, TokenBucket] = {}
@@ -85,25 +94,11 @@ def operations_to_spans(operations : list[parser.Operation]) -> SpanInfo:
                 spans.append(Span(op.actor, start.start, x, start.height, (start.op, op.op), start.eventpoint))
                 actor_depth[op.actor].release(start.height)
 
-    depths = {k: v.max_token()+1 for k,v in actor_depth.items()}
-    return SpanInfo(spans, actors_names, depths)
+    if len(inflight) != 0:
+        raise RuntimeError(f"Unfinished spans: {','.join(inflight.keys())}")
 
-#### Data Model
-
-
-@dataclasses.dataclass
-class Actor(object):
-    name : str
-    slots : units.Slot
-    x : units.Ch = None
-    y : units.Px = None
-    height : units.Px = None
-
-@dataclasses.dataclass
-class Chart(object):
-    actors : list[Actor]
-    spans : list[Span]
-    cross : list[Span]
+    actors = [Actor(name, actor_depth[name].max_token()+1) for name in actors_names]
+    return Chart(actors, spans, [])
 
 def span_width(span : Span) -> units.Ch:
     (left, right) = span.text
@@ -111,24 +106,14 @@ def span_width(span : Span) -> units.Ch:
     both = left and right
     return units.Ch(chars) + (INNER_INNER_BUFFER if both else 0) + INNER_BUFFER * 2
 
-def spans_to_chart(spaninfo : SpanInfo) -> Chart:
-    actors = []
-
-    max_actor_width = max(len(actor) for actor in spaninfo.actors)
-
+def spans_to_chart(chart : Chart) -> Chart:
     base_heights = {}
     current_height = 0
-    for actor in spaninfo.actors:
-        actor_x = units.Ch(0)
-        actor_y = units.Slot(current_height)
-        actor_width = units.Ch(len(actor))
-        actor_height = units.Slot(spaninfo.depths[actor])
-        actors.append(Actor(actor, actor_height))
+    for actor in chart.actors:
+        base_heights[actor.name] = current_height
+        current_height += int(actor.slots)
 
-        base_heights[actor] = current_height
-        current_height += spaninfo.depths[actor]
-
-    for span in spaninfo.spans:
+    for span in chart.spans:
         span.x1 = units.Ch(span.start) * OUTER_BUFFER
         span.x2 = span.x1 + span_width(span)
         if span.eventpoint:
@@ -138,9 +123,9 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
     made_change = True
     while made_change:
         made_change = False
-        for span in spaninfo.spans:
+        for span in chart.spans:
             beforeevent = afterevent = None
-            for other in spaninfo.spans:
+            for other in chart.spans:
                 if other.start < span.start and span.x1 < (other.x1 + OUTER_BUFFER):
                     made_change = True
                     span.x1 = other.x1 + OUTER_BUFFER
@@ -178,7 +163,7 @@ def spans_to_chart(spaninfo : SpanInfo) -> Chart:
                     made_change = True
                     span.event_x = (beforeevent + afterevent)/2
 
-    return Chart(actors, spaninfo.spans, [])
+    return Chart(chart.actors, chart.spans, chart.cross)
 
 #### Renderer
 
@@ -372,7 +357,7 @@ class RootSVG(SVG):
 
 def actor_to_svg(actor : Actor) -> str:
     svg = SVG()
-    svg.text(actor.x, actor.y, XAlign.END, YAlign.MIDDLE, actor.name, font_family="monospace")
+    svg.text(actor.x, actor.y, XAlign.END, YAlign.MIDDLE, actor.name)
     line_x = actor.x + OUTER_BUFFER
     top_y = actor.y + actor.height/2
     bottom_y = actor.y - actor.height/2
@@ -404,29 +389,27 @@ def actors_to_slots_px(actors : list[Actor]) -> dict[units.Slot, units.Px]:
     slot = units.Slot(0)
     y = PX_SPAN_VERTICAL
     px_of_slot = {}
-    actor_of_slot = {}
     for actor in actors:
         for _ in range(int(actor.slots)):
-            actor_of_slot[slot] = actor
             px_of_slot[slot] = y
             y += PX_SPAN_VERTICAL
             slot += 1
         y += PX_ACTORBAR_SEPARATION * 2
-    return px_of_slot, actor_of_slot
+    return px_of_slot
 
 def chart_to_svg(chart : Chart) -> str:
     svg = RootSVG()
 
-    px_of_slot, actor_of_slot = actors_to_slots_px(chart.actors)
+    px_of_slot = actors_to_slots_px(chart.actors)
     spans_of_actor = {}
     for span in chart.spans:
         span.y = px_of_slot[span.slot]
-        spans_of_actor.setdefault(actor_of_slot[span.slot].name, []).append(span)
+        spans_of_actor.setdefault(span.actor, []).append(span)
 
     actor_subregions = {}
     for span in chart.spans:
         span_svg = span_to_svg(span)
-        subregion = actor_subregions.setdefault(actor_of_slot[span.slot].name, SVG())
+        subregion = actor_subregions.setdefault(span.actor, SVG())
         subregion.svg(units.Ch(0), units.Px(0), span_svg)
 
     max_actor_width = max([units.Ch(len(actor.name)) for actor in chart.actors])
@@ -436,12 +419,12 @@ def chart_to_svg(chart : Chart) -> str:
         actor.height = subregion.y_max() - subregion.y_min()
         actor.y = subregion.y_min() + actor.height/2
         actor_svg = actor_to_svg(actor)
-        svg.svg(0, 0, actor_svg)
+        svg.svg(units.Ch(1), 0, actor_svg)
         if constants.GUIDELINES:
             svg.line(units.Percent(0), actor.y-actor.height/2, units.Percent(100), actor.y-actor.height/2, stroke_dasharray="5")
             svg.line(units.Percent(0), actor.y+actor.height/2, units.Percent(100), actor.y+actor.height/2, stroke_dasharray="5")
 
-    spans_x_offset = max_actor_width + OUTER_BUFFER * 2
+    spans_x_offset = units.Ch(1) + max_actor_width + OUTER_BUFFER * 2
     for spansvg in actor_subregions.values():
         svg.svg(spans_x_offset, 0, spansvg)
     return svg.render()
@@ -458,9 +441,9 @@ def to_span_svg(text_input, embed=None):
     if not operations:
         return ""
     if constants.DEBUG: print(operations)
-    spaninfo = operations_to_spans(operations)
-    if constants.DEBUG: print(spaninfo)
-    chart = spans_to_chart(spaninfo)
+    chart = operations_to_spans(operations)
+    if constants.DEBUG: print(chart)
+    chart = spans_to_chart(chart)
     if constants.DEBUG: print(chart)
     svg = chart_to_svg(chart)
     if constants.DEBUG: print(svg)
