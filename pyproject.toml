@@ -19,7 +19,7 @@ classifiers = [
 Changelog = "https://github.com/thisismiller/dbdiag/releases"
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.10"
 
 [tool.poetry.dev-dependencies]
 pytest = ">=6.2.5"
@@ -30,6 +30,7 @@ url = "https://pypi.org/simple/"
 
 [tool.poetry.scripts]
 dbdiag = "dbdiag.cli:main"
+dbdiag-history = "dbdiag.cli:main_history"
 dbdiag-spans = "dbdiag.cli:main_spans"
 
 [tool.coverage.paths]

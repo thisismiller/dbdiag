@@ -130,3 +130,14 @@ def test_unsugar():
         [parser.Statement('T1', None, None, 'W(Y)', '__1')],
         [parser.Statement('T1', None, None, None, '__1')],
     ]
+
+@parser_test
+def test_no_actors():
+    '''
+    : T1.W(A)
+    : T1.W(B)
+    '''
+    return [
+        parser.Statement('', None, None, 'T1.W(A)', None),
+        parser.Statement('', None, None, 'T1.W(B)', None),
+    ]

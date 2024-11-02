@@ -58,7 +58,7 @@ def optional(parser):
     return fn
 
 
-ACTORTEXT = r'"[^"]+"|[a-zA-Z0-9]+'
+ACTORTEXT = r'"[^"]*"|[a-zA-Z0-9]*'
 TEXT = r'"[^"]+"|[a-zA-Z0-9_(){}\[\],.]+'
 
 def make_consumer(regex, key):

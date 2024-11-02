@@ -7,6 +7,218 @@ from . import units
 from . import model
 from .units import *
 
+
+def chart_assign_xs_old(chart : model.Chart) -> model.Chart:
+    base_heights = {}
+    current_height = 0
+    for actor in chart.actors:
+        base_heights[actor.name] = current_height
+        current_height += int(actor.slots)
+
+    for span in chart.spans:
+        span.x1 = units.Ch(span.start) * OUTER_BUFFER
+        span.x2 = span.x1 + span.width()
+        if span.eventpoint:
+            span.event_x = units.Ch(span.eventpoint) * OUTER_BUFFER
+        span.slot = units.Slot(base_heights[span.actor] + span.height)
+
+    made_change = True
+    while made_change:
+        made_change = False
+        for span in chart.spans:
+            beforeevent = afterevent = None
+            for other in chart.spans:
+                if other.start < span.start and span.x1 < (other.x1 + OUTER_BUFFER):
+                    made_change = True
+                    span.x1 = other.x1 + OUTER_BUFFER
+                    span.x2 = max(span.x2, span.x1 + span.width())
+                if other.end < span.start and span.x1 < (other.x2 + OUTER_BUFFER):
+                    made_change = True
+                    span.x1 = other.x2 + OUTER_BUFFER
+                    span.x2 = max(span.x2, span.x1 + span.width())
+                if other.end < span.end and span.x2 < (other.x2 + OUTER_BUFFER):
+                    made_change = True
+                    span.x2 = other.x2 + OUTER_BUFFER
+                lkj = [['start', 'x1'], ['eventpoint', 'event_x'], ['end', 'x2']]
+                for idxattr, xattr in lkj:
+                    if span.start-1 == getattr(other, idxattr) and span.x1 > getattr(other, xattr) + OUTER_BUFFER:
+                        made_change = True
+                        span.x1 = getattr(other, xattr) + OUTER_BUFFER
+                        span.x2 = span.x1 + span.width()
+                if span.eventpoint:
+                    if other.start == span.eventpoint-1:
+                        beforeevent = other.x1
+                    if other.end == span.eventpoint-1:
+                        beforeevent = other.x2
+                    if other.eventpoint == span.eventpoint-1:
+                        beforeevent = other.event_x
+                    if other.start == span.eventpoint+1:
+                        afterevent = other.x1
+                    if other.end == span.eventpoint+1:
+                        afterevent = other.x2
+                    if other.eventpoint == span.eventpoint+1:
+                        afterevent = other.event_x
+            if span.eventpoint:
+                if beforeevent is None or afterevent is None:
+                    made_change = True
+                elif span.event_x != (beforeevent + afterevent)/2:
+                    made_change = True
+                    span.event_x = (beforeevent + afterevent)/2
+
+    return model.Chart(chart.actors, chart.spans, chart.cross)
+
+def chart_assign_xs_generic(chart : model.Chart) -> model.Chart:
+    DEBUG_THIS = True
+    base_heights = {}
+    current_height = 0
+    for actor in chart.actors:
+        base_heights[actor.name] = current_height
+        current_height += int(actor.slots)
+
+    posxattrs = [['start', 'x1'], ['eventpoint', 'event_x'], ['end', 'x2']]
+
+    for span in chart.spans:
+        for posattr, xattr in posxattrs:
+            if getattr(span, posattr) is not None:
+                setattr(span, xattr, units.Ch(getattr(span, posattr)) * OUTER_BUFFER)
+        span.x2 = max(span.x2, span.x1 + span.width())
+        span.slot = units.Slot(base_heights[span.actor] + span.height)
+
+    made_change = True
+    while made_change:
+        made_change = False
+        for lhs in chart.spans:
+            for rhs in chart.spans:
+                for lhsposattr, lhsxattr in posxattrs:
+                    if getattr(lhs, lhsposattr) is None:
+                        continue
+                    for rhsposattr, rhsxattr in posxattrs:
+                        if getattr(rhs, rhsposattr) is None:
+                            continue
+                        if getattr(lhs, lhsposattr) < getattr(rhs, rhsposattr) and getattr(lhs, lhsxattr) + lhs.OUTER_BUFFER > getattr(rhs, rhsxattr):
+                            made_change = True
+                            if DEBUG_THIS: print(f'case=1 lhs.{lhsposattr}={getattr(lhs,lhsposattr)} lhs.{lhsxattr}={getattr(lhs,lhsxattr)} rhs.{rhsposattr}={getattr(rhs,rhsposattr)} rhs.{rhsxattr}={getattr(rhs,rhsxattr)} ')
+                            setattr(rhs, rhsxattr, getattr(lhs, lhsxattr) + lhs.OUTER_BUFFER)
+                            rhs.x2 = max(rhs.x2, rhs.x1 + rhs.width())
+                            if DEBUG_THIS: print(f'case=1 lhs.{lhsposattr}={getattr(lhs,lhsposattr)} lhs.{lhsxattr}={getattr(lhs,lhsxattr)} rhs.{rhsposattr}={getattr(rhs,rhsposattr)} rhs.{rhsxattr}={getattr(rhs,rhsxattr)} ')
+                    startgroups = [s for s in chart.spans if rhs.start == s.start]
+                    if all(getattr(lhs, lhsposattr) == s.start - 1 and s.x1 > getattr(lhs, lhsxattr) + lhs.OUTER_BUFFER for s in startgroups):
+                        made_change = True
+                        maxwidth_x2 = max(s.x1 + s.width() for s in startgroups)
+                        for s in startgroups:
+                            if DEBUG_THIS: print(f'case=2 lhs.{lhsposattr}={getattr(lhs,lhsposattr)} lhs.{lhsxattr}={getattr(lhs,lhsxattr)} s.start={s.start} s.x1={s.x1} ')
+                            s.x1 = getattr(lhs, lhsxattr) + lhs.OUTER_BUFFER
+                            s.x2 = maxwidth_x2
+                            if DEBUG_THIS: print(f'case=2 lhs.{lhsposattr}={getattr(lhs,lhsposattr)} lhs.{lhsxattr}={getattr(lhs,lhsxattr)} s.start={s.start} s.x1={s.x1} ')
+                    endgroups = [s for s in chart.spans if rhs.end == s.end]
+                    if all(getattr(lhs, lhsposattr) == s.end - 1 and s.x1 + s.width() < s.x2 and s.x2 > getattr(lhs, lhsxattr) + lhs.OUTER_BUFFER for s in endgroups):
+                        made_change = True
+                        maxwidth_x2 = max(s.x1 + s.width() for s in endgroups)
+                        for s in endgroups:
+                            if DEBUG_THIS: print(f'case=3 lhs.{lhsposattr}={getattr(lhs,lhsposattr)} lhs.{lhsxattr}={getattr(lhs,lhsxattr)} s.end={s.end} s.x1={s.x1} s.width={s.width()} s.x2={s.x2} maxwidth={maxwidth_x2}')
+                            s.x2 = max(maxwidth_x2, getattr(lhs, lhsxattr) + lhs.OUTER_BUFFER)
+                            if DEBUG_THIS: print(f'case=3 lhs.{lhsposattr}={getattr(lhs,lhsposattr)} lhs.{lhsxattr}={getattr(lhs,lhsxattr)} s.end={s.end} s.x1={s.x1} s.width={s.width()} s.x2={s.x2} maxwidth={maxwidth_x2}')
+
+def chart_assign_xs_linprog(chart : model.Chart):
+    base_heights = {}
+    current_height = 0
+    for actor in chart.actors:
+        base_heights[actor.name] = current_height
+        current_height += int(actor.slots)
+
+    max_pos = max(s.end for s in chart.spans) + 1
+    baseweights = [0] * max_pos
+
+    # Aim to minimize the total width
+    target = baseweights.copy()
+    target[max_pos-1] = 1
+
+    inequals = []
+    constants = []
+    # Ensure each X is separated by at least OUTER_BUFFER
+    # x_0 + OUTER_BUFFER <= x_1  ->  x_0 - x_1 <= -OUTER_BUFFER
+    for idx in range(max_pos-1):
+        ineq = baseweights.copy()
+        ineq[idx] = 1
+        ineq[idx+1] = -1
+        inequals.append(ineq)
+        outer_buffer = max(s.OUTER_BUFFER for s in chart.spans if s.start==idx or s.end==idx or s.eventpoint==idx)
+        constants.append(-int(outer_buffer))
+    
+    # Now add the constraints for the widths
+    # x_0 + width >= x1  ->  x_0 - x1 >= width  ->  x1 - x0 <= width
+    for span in chart.spans:
+        ineq = baseweights.copy()
+        ineq[span.start] = -1
+        ineq[span.end] = 1
+        inequals.append(ineq)
+        constants.append(int(span.width()))
+    
+    # Bounds is always (0, infinity)
+    x_bounds = [(0, None)] * max_pos
+    # Integer variable; decision variable must be an integer within bounds.
+    integrality = [1] * max_pos
+
+    for weights, const in zip(inequals, constants):
+        lhs = ' + '.join([str(weight) + '*x_' + str(idx) for idx,weight in enumerate(weights) if weight != 0])
+        print(f'{lhs} <= {const}')
+
+    import scipy.optimize
+    result = scipy.optimize.linprog(target, A_ub=inequals, b_ub=constants, bounds=x_bounds, integrality=integrality)
+    print(result)
+
+    pos_to_ch = baseweights.copy()
+    for idx, val in enumerate(result.x):
+        pos_to_ch[idx] = units.Ch(int(val))
+    
+    posxattrs = [['start', 'x1'], ['eventpoint', 'event_x'], ['end', 'x2']]
+    for span in chart.spans:
+        for posattr, xattr in posxattrs:
+            if getattr(span, posattr) is not None:
+                setattr(span, xattr, pos_to_ch[getattr(span, posattr)])
+        span.slot = units.Slot(base_heights[span.actor] + span.height)
+
+def chart_assign_xs_shittylinprog(chart : model.Chart):
+    DEBUG_THIS = False
+    base_heights = {}
+    current_height = 0
+    for actor in chart.actors:
+        base_heights[actor.name] = current_height
+        current_height += int(actor.slots)
+
+    max_pos = max(s.end for s in chart.spans) + 1
+    constraints = {}
+
+    for idx in range(max_pos-1):
+        outer_buffer = max(s.OUTER_BUFFER for s in chart.spans if s.start==idx or s.end==idx or s.eventpoint==idx)
+        constraints[(idx, idx+1)] = int(outer_buffer)
+    for span in chart.spans:
+        constraints[(span.start, span.end)] = int(span.width())
+
+    xs = [0] * max_pos
+    made_change = True
+    while made_change:
+        made_change = False
+        for (start,end), v in constraints.items():
+            if xs[end] - xs[start] < v:
+                made_change = True
+                if DEBUG_THIS: print(f'xs[{start}]={xs[start]} xs[{end}]={xs[end]} after={v}')
+                xs[end] = xs[start] + v
+
+    pos_to_ch = [units.Ch(0)] * max_pos
+    for idx, val in enumerate(xs):
+        pos_to_ch[idx] = units.Ch(int(val))
+
+    posxattrs = [['start', 'x1'], ['eventpoint', 'event_x'], ['end', 'x2']]
+    for span in chart.spans:
+        for posattr, xattr in posxattrs:
+            if getattr(span, posattr) is not None:
+                setattr(span, xattr, pos_to_ch[getattr(span, posattr)])
+        span.slot = units.Slot(base_heights[span.actor] + span.height)
+    
+
+chart_assign_xs = chart_assign_xs_shittylinprog
+
 class Renderable(abc.ABC):
     @abc.abstractmethod
     def x_min(self): pass
@@ -190,7 +402,7 @@ class RootSVG(SVG):
 
     def render(self):
         body = super().render()
-        lines = [self._svg_header(self.x_max(), self.y_max())]
+        lines = [self._svg_header(self.x_max() + units.Ch(1), self.y_max() + PX_ACTORBAR_SEPARATION*2)]
         lines.append(body)
         lines.append(self._svg_footer())
         return '\n'.join(lines)
@@ -204,12 +416,18 @@ def actor_to_svg(actor : model.Actor) -> str:
     svg.line(line_x, top_y, line_x, bottom_y)
     return svg
 
+def operation_to_svg(op : model.Operation) -> SVG:
+    svg = SVG()
+    mid_x = (op.x1 + op.x2)/2
+    svg.text(mid_x, op.y, XAlign.MIDDLE, YAlign.BOTTOM, op.text)
+    return svg
+
 def span_to_svg(span : model.Span) -> str:
     svg = SVG()
     svg.line(span.x1, span.y, span.x2, span.y)
     svg.line(span.x1, span.y-BARHEIGHT, span.x1, span.y+BARHEIGHT)
     svg.line(span.x2, span.y-BARHEIGHT, span.x2, span.y+BARHEIGHT)
-    if span.event_x:
+    if span.event_x is not None:
         svg.circle(span.event_x, span.y, PX_EVENT_RADIUS)
 
     left_text, right_text = span.text
@@ -227,7 +445,7 @@ def span_to_svg(span : model.Span) -> str:
 
 def actors_to_slots_px(actors : list[model.Actor]) -> dict[units.Slot, units.Px]:
     slot = units.Slot(0)
-    y = PX_SPAN_VERTICAL
+    y = PX_CHAR_HEIGHT + PX_LINE_TEXT_SEPARATION
     px_of_slot = {}
     for actor in actors:
         for _ in range(int(actor.slots)):
@@ -248,10 +466,17 @@ def chart_to_svg(chart : model.Chart) -> str:
 
     actor_subregions = {}
     for span in chart.spans:
-        span_svg = span_to_svg(span)
+        match span:
+            case model.Operation():
+                span_svg = operation_to_svg(span)
+            case model.Span():
+                span_svg = span_to_svg(span)
+            case _:
+                assert False
         subregion = actor_subregions.setdefault(span.actor, SVG())
         subregion.svg(units.Ch(0), units.Px(0), span_svg)
 
+    show_actors = len(chart.actors) > 1 or chart.actors[0].name != ""
     max_actor_width = max([units.Ch(len(actor.name)) for actor in chart.actors])
     for actor in chart.actors:
         subregion = actor_subregions[actor.name]
@@ -259,12 +484,15 @@ def chart_to_svg(chart : model.Chart) -> str:
         actor.height = subregion.y_max() - subregion.y_min()
         actor.y = subregion.y_min() + actor.height/2
         actor_svg = actor_to_svg(actor)
-        svg.svg(units.Ch(1), 0, actor_svg)
+        if show_actors:
+            svg.svg(units.Ch(1), 0, actor_svg)
         if constants.GUIDELINES:
             svg.line(units.Percent(0), actor.y-actor.height/2, units.Percent(100), actor.y-actor.height/2, stroke_dasharray="5")
             svg.line(units.Percent(0), actor.y+actor.height/2, units.Percent(100), actor.y+actor.height/2, stroke_dasharray="5")
 
-    spans_x_offset = units.Ch(1) + max_actor_width + OUTER_BUFFER * 2
+    spans_x_offset = units.Ch(1)
+    if show_actors:
+        spans_x_offset += max_actor_width + OUTER_BUFFER * 2
     for spansvg in actor_subregions.values():
         svg.svg(spans_x_offset, 0, spansvg)
     return svg.render()

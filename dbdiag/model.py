@@ -17,10 +17,15 @@ class Operation(object):
     start : int
     end : int
     text : str
+    height : int = 0
+    eventpoint : Optional[int] = None
     x1 : Optional[units.Ch] = None
     x2 : Optional[units.Ch] = None
+    event_x : Optional[units.Ch] = None
     slot : Optional[units.Slot] = None
     y : Optional[units.Px] = None
+
+    OUTER_BUFFER = units.Ch(2)
 
     def width(self) -> units.Ch:
         return units.Ch(len(self.text))
@@ -38,6 +43,8 @@ class Span(object):
     event_x : Optional[units.Ch] = None
     slot : Optional[units.Slot] = None
     y : Optional[units.Px] = None
+
+    OUTER_BUFFER = units.Ch(4)
 
     def width(self) -> units.Ch:
         (left, right) = self.text
