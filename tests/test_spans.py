@@ -1,7 +1,7 @@
 import pytest
 import textwrap
 import functools
-from dbdiag import parser, spans
+from dbdiag import parser, model, spans, units
 
 def spans_test(fn):
     @functools.wraps(fn)
@@ -28,9 +28,9 @@ def test_spans():
     A: W(A) A
     A: ok A
     '''
-    return spans.SpanInfo([
-        spans.Span('A', 0, 1, 0, ('W(A)', 'ok'), None)
-    ], ['A'], {'A': 1})
+    return model.Chart([model.Actor('A', units.Slot(1))], [
+        model.Span('A', 0, 1, 0, ('W(A)', 'ok'), None)
+    ], [])
 
 @spans_test
 def test_short_spans():
@@ -38,10 +38,10 @@ def test_short_spans():
     A: W(X)
     B: R(X)
     '''
-    return spans.SpanInfo([
-        spans.Span('A', 0, 1, 0, ('W(X)', None), None),
-        spans.Span('B', 2, 3, 0, ('R(X)', None), None)
-    ], ['A', 'B'], {'A': 1, 'B': 1})
+    return model.Chart([model.Actor('A', units.Slot(1)), model.Actor('B', units.Slot(1))], [
+        model.Span('A', 0, 1, 0, ('W(X)', None), None),
+        model.Span('B', 2, 3, 0, ('R(X)', None), None)
+    ], [])
 
 @spans_test
 def test_groups():
@@ -53,7 +53,7 @@ def test_groups():
     A: ok A
     B: ok B
     '''
-    return spans.SpanInfo([
-        spans.Span('A', 0, 1, 0, ('W(A)', 'ok'), None),
-        spans.Span('B', 0, 2, 0, ('W(B)', 'ok'), None)
-    ], ['A', 'B'], {'A': 1, 'B': 1})
+    return model.Chart([model.Actor('A', units.Slot(1)), model.Actor('B', units.Slot(1))], [
+        model.Span('A', 0, 1, 0, ('W(A)', 'ok'), None),
+        model.Span('B', 0, 2, 0, ('W(B)', 'ok'), None)
+    ], [])
