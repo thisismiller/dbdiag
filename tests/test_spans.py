@@ -9,7 +9,7 @@ def spans_test(fn):
         text = textwrap.dedent(fn.__doc__)
         expected = fn()
         actual = parser.parse(text)
-        actual = spans.operations_to_spans(actual)
+        actual = spans.statements_to_spans(actual)
         assert expected == actual
     return testcode
 
@@ -19,7 +19,7 @@ def spans_test_raises(fn):
         with pytest.raises(RuntimeError):
             text = textwrap.dedent(fn.__doc__)
             ast = parser.parse(text)
-            spans.operations_to_spans(ast)
+            spans.statements_to_spans(ast)
     return testcode
 
 @spans_test

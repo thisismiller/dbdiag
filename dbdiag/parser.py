@@ -16,15 +16,15 @@ A <- C: Reply .C
 ]
 '''
 
-class Operation(NamedTuple):
+class Statement(NamedTuple):
     actor: str
     arrow: Optional[str]
     dest: Optional[str]
     op: str
     key: Optional[str]
 
-Grouping : TypeAlias = List[Operation]
-AST : TypeAlias = List[Grouping | Operation]
+Grouping : TypeAlias = List[Statement]
+AST : TypeAlias = List[Grouping | Statement]
 
 def compose(*args):
     def fn(text):
@@ -95,23 +95,23 @@ parse_grouping = compose(
 parser = choose(parse_grouping, parse_action)
 
 
-def parse_operations(text : str) -> AST:
-    """Parse a text file of operations into List[Operation].
+def parse_statements(text : str) -> AST:
+    """Parse a text file of statements into List[Statement].
 
     TEXT := "[^"]+"                           # Quoted strings get " stripped
           | [a-zA-Z0-9_(){},.]+               # Omit " for anything identifier-like
     COMMENT := #.*                            # '#' is still for comments
     ARROW := <- | -> | -x | x-                # Direction of communication
     SEPARATOR := : | .                        # a foo, a: foo() or a.foo are all fine
-    OPERATION := TEXT (ARROW TEXT)? SEPARATOR? TEXT TEXT?
+    statement := TEXT (ARROW TEXT)? SEPARATOR? TEXT TEXT?
     GROUPING := [ | ]                         # Concurrent events are in []'s
     LINE := NOTHING
           | COMMENT
           | GROUPING
-          | OPERATION COMMENT?
+          | statement COMMENT?
     """
 
-    operations = []
+    statements = []
     grouplist = None
     for line in text.splitlines():
         line = line.strip('\n')
@@ -131,7 +131,7 @@ def parse_operations(text : str) -> AST:
         if result.get('grouping') == ']':
             if grouplist is None:
                 raise RuntimeError('Unbalanced []. Terminating grouping that was not started.')
-            operations.append(grouplist)
+            statements.append(grouplist)
             grouplist = None
             continue
 
@@ -142,17 +142,17 @@ def parse_operations(text : str) -> AST:
             # TODO: There's probably some fancier way to have sentinels
             opname = 'EVENT'
         opname = opname.strip('"') if opname else None
-        operation = Operation(result['source'], result.get('arrow'), result.get('dest'), opname, result.get('key'))
-        (grouplist if grouplist is not None else operations).append(operation)
+        statement = Statement(result['source'], result.get('arrow'), result.get('dest'), opname, result.get('key'))
+        (grouplist if grouplist is not None else statements).append(statement)
     if grouplist is not None:
         raise RuntimeError('EOF with unbalanced []. Terminating grouping that was not started.')
-    return operations
+    return statements
 
-def unsugar_operations(operations : AST) -> AST:
-    ops : list[list[Operation]] = []
+def unsugar_statements(statements : AST) -> AST:
+    ops : list[list[Statement]] = []
     
-    # Desugar raw operations into a single operation group
-    for op in operations:
+    # Desugar raw statements into a single statement group
+    for op in statements:
         if not isinstance(op, list):
             ops.append([op])
         else:
@@ -167,7 +167,7 @@ def unsugar_operations(operations : AST) -> AST:
         return fn
     generate_key = generate_key_fn()
     
-    # Desugar key-less operations into a start immediately followed by an end.
+    # Desugar key-less statements into a start immediately followed by an end.
     for gidx, group in enumerate(ops):
         short_ops = []
         for opidx, op in enumerate(group):
@@ -182,5 +182,5 @@ def unsugar_operations(operations : AST) -> AST:
     return ops
 
 def parse(text):
-    raw_ast = parse_operations(text)
-    return unsugar_operations(raw_ast)
+    raw_ast = parse_statements(text)
+    return unsugar_statements(raw_ast)

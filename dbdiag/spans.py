@@ -32,13 +32,13 @@ class TokenBucket(object):
     def max_token(self) -> int:
         return self._max_token
 
-def operations_to_spans(operations : list[parser.Operation]) -> model.Chart:
+def statements_to_spans(statements : list[parser.Statement]) -> model.Chart:
     inflight : dict[str, model.SpanStart] = {}
     actors_names : list[str] = []
     actor_depth : dict[str, TokenBucket] = {}
     spans : list[model.Span] = []
 
-    for idx, group in enumerate(operations):
+    for idx, group in enumerate(statements):
         for op in group:
             if op.actor not in actors_names:
                 actors_names.append(op.actor)
@@ -136,13 +136,13 @@ def to_span_svg(text_input, embed=None):
     if embed is True or embed is False:
         constants.EMBED = embed
     try:
-        operations = parser.parse(text_input)
+        statements = parser.parse(text_input)
     except RuntimeError as e:
         return str(e)
-    if not operations:
+    if not statements:
         return ""
-    if constants.DEBUG: print(operations)
-    chart = operations_to_spans(operations)
+    if constants.DEBUG: print(statements)
+    chart = statements_to_spans(statements)
     if constants.DEBUG: print(chart)
     chart = spans_to_chart(chart)
     if constants.DEBUG: print(chart)
