@@ -7,7 +7,7 @@ from . import units
 from . import model
 from .units import *
 
-class Drawable(abc.ABC):
+class Renderable(abc.ABC):
     @abc.abstractmethod
     def x_min(self): pass
     @abc.abstractmethod
@@ -22,7 +22,7 @@ class Drawable(abc.ABC):
     def translate(self, x, y): pass
 
 @dataclasses.dataclass
-class Line(Drawable):
+class Line(Renderable):
     x1 : Dimension
     y1 : Dimension
     x2 : Dimension
@@ -53,7 +53,7 @@ class YAlign(enum.StrEnum):
     BOTTOM = "baseline"
 
 @dataclasses.dataclass
-class Text(Drawable):
+class Text(Renderable):
     x : Dimension
     y : Dimension
     xalign : XAlign
@@ -101,7 +101,7 @@ class Text(Drawable):
         self.y += y
 
 @dataclasses.dataclass
-class Circle(Drawable):
+class Circle(Renderable):
     x : Dimension
     y : Dimension
     r : Dimension
